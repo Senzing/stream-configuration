@@ -1,0 +1,5 @@
+configparser
+confluent-kafka
+Flask
+psutil
+pika
