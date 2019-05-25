@@ -21,7 +21,7 @@ services:
     environment:
 #     See https://github.com/bitnami/bitnami-docker-kafka#configuration
       ALLOW_PLAINTEXT_LISTENER: "yes"
-      KAFKA_NUM_PARTITIONS: 5
+      KAFKA_NUM_PARTITIONS: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
     networks:
       - backend
@@ -37,10 +37,8 @@ services:
     environment:
 #     See https://github.com/Senzing/docker-mock-data-generator#configuration
       SENZING_KAFKA_BOOTSTRAP_SERVER: senzing-kafka:9092
-      SENZING_KAFKA_TOPIC: "senzing-kafka-topic"
-      SENZING_INPUT_URL: "https://s3.amazonaws.com/public-read-access/TestDataSets/loadtest-dataset-1M.json"
-      SENZING_RECORD_MAX: 10000
-      SENZING_RECORD_MONITOR: 1000
+      SENZING_KAFKA_TOPIC: "senzing-config-kafka-topic"
+      SENZING_INPUT_URL: "https://raw.githubusercontent.com/Senzing/stream-configuration/master/tests/datasource/scenario.jsonlines"
       SENZING_SUBCOMMAND: url-to-kafka
     networks:
       - backend
@@ -67,12 +65,13 @@ services:
     environment:
 #     See https://github.com/Senzing/stream-configuration#configuration
       SENZING_KAFKA_BOOTSTRAP_SERVER: senzing-kafka:9092
-      SENZING_KAFKA_TOPIC: "senzing-config-kafka-topic"
-      SENZING_INPUT_URL: "https://s3.amazonaws.com/public-read-access/TestDataSets/loadtest-dataset-1M.json"
+      SENZING_KAFKA_TOPIC: senzing-config-kafka-topic
       SENZING_SUBCOMMAND: kafka
     networks:
       - backend
     restart: on-failure
+    volumes:
+      - ${SENZING_DIR:-/opt/senzing}:/opt/senzing
 
 networks:
   backend:

@@ -7,9 +7,11 @@
 import argparse
 import configparser
 import json
+import linecache
 import logging
 import os
 import signal
+import six
 import sys
 import time
 import confluent_kafka
@@ -178,10 +180,12 @@ message_dictionary = {
     "198": "For information on warnings and errors, see https://github.com/Senzing/stream-loader#errors",
     "199": "{0}",
     "200": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}W",
+    "202": "Non-fatal exception on Line {0}: {1} Error: {2}",
     "400": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}E",
     "401": "Cannot process request. No function for '{0}'.",
     "402": "Cannot process request. Method '{0}' not in {1}",
     "403": "Cannot process request. Key '{0}' not in request.",
+    "406": "Cannot find G2Project.ini.",
     "498": "Bad SENZING_SUBCOMMAND: {0}.",
     "499": "No processing done.",
     "500": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}E",
@@ -189,6 +193,7 @@ message_dictionary = {
     "502": "Could not connect to database. URL: {0} Error type: {1} Error: {2}",
     "599": "Program terminated with error.",
     "900": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}D",
+    "901": "Execute SQL: {0}",
     "999": "{0}",
 }
 
@@ -594,13 +599,27 @@ def get_g2_database(config):
 
 
 def database_exec(config, sql):
+    result = {}
+    logging.debug(message_debug(901, sql))
     g2_database = get_g2_database(config)
-    return g2_database.sqlExec(sql)
+    try:
+        result = g2_database.sqlExec(sql)
+    except:
+        exception = get_exception()
+        logging.warn(message_warn(202, exception.get('line_number'), exception.get('line'), exception.get('exception')))
+    return result
 
 
 def database_select(config, sql):
+    result = {}
+    logging.debug(message_debug(901, sql))
     g2_database = get_g2_database(config)
-    sql_cursor = g2_database.sqlExec(sql)
+    try:
+        sql_cursor = g2_database.sqlExec(sql)
+    except:
+        exception = get_exception()
+        logging.warn(message_warn(202, exception.get('line_number'), exception.get('line'), exception.get('exception')))
+        return
     if not sql_cursor:
         return
     result = g2_database.fetchNext(sql_cursor)
@@ -610,8 +629,14 @@ def database_select(config, sql):
 
 
 def database_select_single_row(config, sql):
+    result = {}
+    logging.debug(message_debug(901, sql))
     g2_database = get_g2_database(config)
-    sql_cursor = g2_database.sqlExec(sql)
+    try:
+        sql_cursor = g2_database.sqlExec(sql)
+    except:
+        exception = get_exception()
+        logging.warn(message_warn(202, exception.get('line_number'), exception.get('line'), exception.get('exception')))
     if not sql_cursor:
         return
     return g2_database.fetchNext(sql_cursor)
@@ -704,7 +729,7 @@ def handle_post_datasources(config, request):
     result = {
         'returnCode': 0,
         'messageId': message(MESSAGE_INFO, 110),
-        'message': message(110, next_id),
+        'message': message(110, request.get('DSRC_ID')),
         'request': request,
     }
 
@@ -727,7 +752,7 @@ def handle_put_datasources(config, request):
 
     set_clause = []
     for key, value in request.items():
-        if isinstance(value, str):
+        if isinstance(value, six.string_types):
             value = "\"{0}\"".format(value)
         set_clause.append("{0} = {1}".format(key, value))
 
