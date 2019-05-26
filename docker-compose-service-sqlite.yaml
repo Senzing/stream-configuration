@@ -1,0 +1,32 @@
+version: '3'
+services:
+
+  sqliteweb:
+    image: coleifer/sqlite-web
+    container_name: senzing-sqlite-web
+    environment:
+      SQLITE_DATABASE: G2C.db
+    networks:
+      - backend
+    ports:
+      - 8080:8080
+    restart: always
+    volumes:
+      - ${SENZING_DIR:-/opt/senzing}/g2/sqldb:/data
+
+  streamconfiguration:
+    image: senzing/stream-configuration
+    container_name: senzing-stream-configuration
+    environment:
+#     See https://github.com/Senzing/stream-configuration#configuration
+      SENZING_SUBCOMMAND: service
+    networks:
+      - backend
+    ports:
+      - 5000:5000
+    restart: on-failure
+    volumes:
+      - ${SENZING_DIR:-/opt/senzing}:/opt/senzing
+
+networks:
+  backend:

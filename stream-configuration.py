@@ -7,9 +7,11 @@
 import argparse
 import configparser
 import json
+import linecache
 import logging
 import os
 import signal
+import six
 import sys
 import time
 import confluent_kafka
@@ -147,6 +149,14 @@ def get_parser():
     subparser_3.add_argument("--kafka-topic", dest="kafka_topic", metavar="SENZING_KAFKA_TOPIC", help="Kafka topic. Default: senzing-config-kafka-topic")
     subparser_3.add_argument("--senzing-dir", dest="senzing_dir", metavar="SENZING_DIR", help="Location of Senzing. Default: /opt/senzing")
 
+    subparser_4 = subparsers.add_parser('rabbitmq', help='Read JSON Lines from RabbitMQ queue.')
+    subparser_4.add_argument("--debug", dest="debug", action="store_true", help="Enable debugging. (SENZING_DEBUG) Default: False")
+    subparser_4.add_argument("--rabbitmq-host", dest="rabbitmq_host", metavar="SENZING_rabbitmq_host", help="RabbitMQ host. Default: localhost:5672")
+    subparser_4.add_argument("--rabbitmq-queue", dest="rabbitmq_queue", metavar="SENZING_RABBITMQ_QUEUE", help="RabbitMQ queue. Default: senzing-rabbitmq-queue")
+    subparser_4.add_argument("--rabbitmq-username", dest="rabbitmq_username", metavar="SENZING_RABBITMQ_USERNAME", help="RabbitMQ username. Default: user")
+    subparser_4.add_argument("--rabbitmq-password", dest="rabbitmq_password", metavar="SENZING_RABBITMQ_PASSWORD", help="RabbitMQ password. Default: bitnami")
+    subparser_4.add_argument("--senzing-dir", dest="senzing_dir", metavar="SENZING_DIR", help="Location of Senzing. Default: /opt/senzing")
+
     subparser_10 = subparsers.add_parser('docker-acceptance-test', help='For Docker acceptance testing.')
 
     return parser
@@ -171,24 +181,27 @@ message_dictionary = {
     "100": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}I",
     "101": "Enter {0}",
     "102": "Exit {0}",
-    "110": "Successfully added CFG_DSRC.DSRC_ID: {0}.",
-    "111": "Successfully deleted CFG_DSRC.DSRC_ID: {0}.",
-    "112": "Successfully updated CFG_DSRC: {0}.",
+    "110": "Successfully added CFG_DSRC.DSRC_ID: {0}",
+    "111": "Successfully deleted CFG_DSRC.DSRC_ID: {0}",
+    "112": "Successfully updated CFG_DSRC.DSRC_ID: {0}",
     "197": "Version: {0}  Updated: {1}",
     "198": "For information on warnings and errors, see https://github.com/Senzing/stream-loader#errors",
     "199": "{0}",
     "200": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}W",
+    "202": "Non-fatal exception on Line {0}: {1} Error: {2}",
     "400": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}E",
     "401": "Cannot process request. No function for '{0}'.",
     "402": "Cannot process request. Method '{0}' not in {1}",
     "403": "Cannot process request. Key '{0}' not in request.",
-    "498": "Bad SENZING_SUBCOMMAND: {0}.",
+    "406": "Cannot find G2Project.ini.",
+    "498": "Bad SENZING_SUBCOMMAND: {0}",
     "499": "No processing done.",
     "500": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}E",
     "501": "Error: {0} for {1}",
     "502": "Could not connect to database. URL: {0} Error type: {1} Error: {2}",
     "599": "Program terminated with error.",
     "900": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}D",
+    "901": "Execute SQL: {0}",
     "999": "{0}",
 }
 
@@ -524,9 +537,9 @@ def create_input_lines_generator_factory(config):
 
     def input_lines_from_url():
         '''A generator for reading lined from a URL-addressable file.'''
-        with urlopen(input_url) as lines:
-            for line in lines:
-                yield line.strip()
+        lines = urlopen(input_url)
+        for line in lines:
+            yield line.strip()
 
     result = None
     input_url = config.get('input_url')
@@ -594,13 +607,27 @@ def get_g2_database(config):
 
 
 def database_exec(config, sql):
+    result = {}
+    logging.debug(message_debug(901, sql))
     g2_database = get_g2_database(config)
-    return g2_database.sqlExec(sql)
+    try:
+        result = g2_database.sqlExec(sql)
+    except:
+        exception = get_exception()
+        logging.warn(message_warn(202, exception.get('line_number'), exception.get('line'), exception.get('exception')))
+    return result
 
 
 def database_select(config, sql):
+    result = {}
+    logging.debug(message_debug(901, sql))
     g2_database = get_g2_database(config)
-    sql_cursor = g2_database.sqlExec(sql)
+    try:
+        sql_cursor = g2_database.sqlExec(sql)
+    except:
+        exception = get_exception()
+        logging.warn(message_warn(202, exception.get('line_number'), exception.get('line'), exception.get('exception')))
+        return
     if not sql_cursor:
         return
     result = g2_database.fetchNext(sql_cursor)
@@ -610,8 +637,14 @@ def database_select(config, sql):
 
 
 def database_select_single_row(config, sql):
+    result = {}
+    logging.debug(message_debug(901, sql))
     g2_database = get_g2_database(config)
-    sql_cursor = g2_database.sqlExec(sql)
+    try:
+        sql_cursor = g2_database.sqlExec(sql)
+    except:
+        exception = get_exception()
+        logging.warn(message_warn(202, exception.get('line_number'), exception.get('line'), exception.get('exception')))
     if not sql_cursor:
         return
     return g2_database.fetchNext(sql_cursor)
@@ -704,7 +737,7 @@ def handle_post_datasources(config, request):
     result = {
         'returnCode': 0,
         'messageId': message(MESSAGE_INFO, 110),
-        'message': message(110, next_id),
+        'message': message(110, request.get('DSRC_ID')),
         'request': request,
     }
 
@@ -727,7 +760,7 @@ def handle_put_datasources(config, request):
 
     set_clause = []
     for key, value in request.items():
-        if isinstance(value, str):
+        if isinstance(value, six.string_types):
             value = "\"{0}\"".format(value)
         set_clause.append("{0} = {1}".format(key, value))
 
