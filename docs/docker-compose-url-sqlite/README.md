@@ -101,7 +101,7 @@ If you do not already have an `/opt/senzing` directory on your local system, vis
     ```console
     cd ${GIT_REPOSITORY_DIR}
 
-    sudo docker-compose --file docker-compose-kafka-sqlite.yaml up
+    sudo docker-compose --file docker-compose-url-sqlite.yaml up
     ```
 
 ### View data
@@ -110,7 +110,6 @@ If you do not already have an `/opt/senzing` directory on your local system, vis
    The table modified by the following `curl` calls is `CFG_DSRC`.
 
 ### Test Senzing configuration API
-
 
 ## Cleanup
 
