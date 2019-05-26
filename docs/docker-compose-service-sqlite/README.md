@@ -101,8 +101,7 @@ If you do not already have an `/opt/senzing` directory on your local system, vis
     ```console
     cd ${GIT_REPOSITORY_DIR}
 
-    sudo \
-      docker-compose --file docker-compose-service-sqlite.yaml up
+    sudo docker-compose --file docker-compose-service-sqlite.yaml up
     ```
 
 ### View data
@@ -141,8 +140,7 @@ If you do not already have an `/opt/senzing` directory on your local system, vis
    Example:
 
     ```console
-    curl -X GET \
-       ${SENZING_CONFIG_URL}/datasources/${DSRC_ID}
+    curl -X GET ${SENZING_CONFIG_URL}/datasources/${DSRC_ID}
     ```
 
 1. Update Senzing data source.
@@ -159,8 +157,7 @@ If you do not already have an `/opt/senzing` directory on your local system, vis
    Example:
 
     ```console
-    curl -X DELETE \
-       ${SENZING_CONFIG_URL}/datasources/${DSRC_ID}
+    curl -X DELETE ${SENZING_CONFIG_URL}/datasources/${DSRC_ID}
     ```
 
 ## Cleanup
