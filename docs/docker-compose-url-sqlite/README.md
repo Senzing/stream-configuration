@@ -111,6 +111,8 @@ If you do not already have an `/opt/senzing` directory on your local system, vis
 
 ### Test Senzing configuration API
 
+1. The `senzing-stream-configuration` log will show the add, update, and delete of a row in `CFG_DSRC`.
+
 ## Cleanup
 
 In a separate (or reusable) terminal window:

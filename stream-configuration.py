@@ -183,7 +183,7 @@ message_dictionary = {
     "102": "Exit {0}",
     "110": "Successfully added CFG_DSRC.DSRC_ID: {0}",
     "111": "Successfully deleted CFG_DSRC.DSRC_ID: {0}",
-    "112": "Successfully updated CFG_DSRC: {0}",
+    "112": "Successfully updated CFG_DSRC.DSRC_ID: {0}",
     "197": "Version: {0}  Updated: {1}",
     "198": "For information on warnings and errors, see https://github.com/Senzing/stream-loader#errors",
     "199": "{0}",
