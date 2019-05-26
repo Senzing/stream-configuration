@@ -107,7 +107,7 @@ If you do not already have an `/opt/senzing` directory on your local system, vis
 ### View data
 
 1. SQLite is viewable at [localhost:8080](http://localhost:8080).
-   The table modified by the following `curl` calls is `CFG_DSRC`.
+   The table modified is `CFG_DSRC`.
 
 ### Test Senzing configuration API
 

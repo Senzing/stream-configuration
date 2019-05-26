@@ -110,32 +110,11 @@ If you do not already have an `/opt/senzing` directory on your local system, vis
 ### View data
 
 1. SQLite is viewable at [localhost:8080](http://localhost:8080).
-   The table modified by the following `curl` calls is `CFG_DSRC`.
+   The table modified is `CFG_DSRC`.
 
 ### Test Senzing configuration API
 
-1. Wait for the following message in the terminal showing docker log.
-
-    ```console
-    senzing-api-server | Started Senzing REST API Server on port 8080.
-    senzing-api-server |
-    senzing-api-server | Server running at:
-    senzing-api-server | http://0.0.0.0:8080/
-    ```
-
-1. Test Senzing REST API server.
-   *Note:*  In
-   [docker-compose-kafka-sqlite.yaml](../../docker-compose-kafka-sqlite.yaml)
-   port 8889 on the localhost has been mapped to port 8080 in the docker container.
-   Example:
-
-    ```console
-    export SENZING_API_SERVICE=http://localhost:8889
-
-    curl -X GET ${SENZING_API_SERVICE}/heartbeat
-    curl -X GET ${SENZING_API_SERVICE}/license
-    curl -X GET ${SENZING_API_SERVICE}/entities/1
-    ```
+1. The `senzing-stream-configuration` log will show the add, update, and delete of a row in `CFG_DSRC`.
 
 ## Cleanup
 
