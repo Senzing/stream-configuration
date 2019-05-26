@@ -35,7 +35,7 @@ This repository and demonstration require 7 GB free disk space.
 
 ### Time
 
-Budget 2 hours to get the demonstration up-and-running, depending on CPU and network speeds.
+Budget 1 hour to get the demonstration up-and-running, depending on CPU and network speeds.
 
 ### Background knowledge
 

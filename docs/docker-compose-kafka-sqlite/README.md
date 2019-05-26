@@ -2,22 +2,8 @@
 
 ## Overview
 
-This repository illustrates a reference implementation of Senzing using
-Kafka as the queue and
-SQLite as the underlying database.
-
-The instructions show how to set up a system that:
-
-1. Reads JSON lines from a file on the internet.
-1. Sends each JSON line to a message queue.
-    1. In this implementation, the queue is Kafka.
-1. Reads messages from the queue and inserts into Senzing.
-    1. In this implementation, Senzing keeps its data in a SQLite database.
-1. Reads information from Senzing via [Senzing REST API](https://github.com/Senzing/senzing-rest-api) server.
-
-The following diagram shows the relationship of the docker containers in this docker composition.
-
-![Image of architecture](architecture.png)
+This docker formation shows how to modify Senzing configuration using the
+`stream-configuration.py kafka` command.
 
 This docker formation brings up the following docker containers:
 
@@ -25,9 +11,7 @@ This docker formation brings up the following docker containers:
 1. *[bitnami/kafka](https://github.com/bitnami/bitnami-docker-kafka)*
 1. *[coleifer/sqlite-web](https://github.com/coleifer/sqlite-web)*
 1. *[senzing/mock-data-generator](https://github.com/Senzing/mock-data-generator)*
-1. *[senzing/senzing-base](https://github.com/Senzing/docker-senzing-base)*
-1. *[senzing/stream-loader](https://github.com/Senzing/stream-loader)*
-1. *[senzing/senzing-api-server](https://github.com/Senzing/senzing-api-server)*
+1. *[senzing/stream-configuration](https://github.com/Senzing/stream-configuration)*
 
 ### Contents
 
@@ -43,7 +27,7 @@ This docker formation brings up the following docker containers:
     1. [Configuration](#configuration)
     1. [Run docker formation](#run-docker-formation)
     1. [View data](#view-data)
-    1. [Test Senzing API](#test-senzing-api)
+    1. [Test Senzing configuration API](#test-senzing-configuration-api)
 1. [Cleanup](#cleanup)
 
 ## Expectations
@@ -54,7 +38,7 @@ This repository and demonstration require 7 GB free disk space.
 
 ### Time
 
-Budget 2 hours to get the demonstration up-and-running, depending on CPU and network speeds.
+Budget 1 hour to get the demonstration up-and-running, depending on CPU and network speeds.
 
 ### Background knowledge
 
@@ -78,7 +62,7 @@ The following software programs need to be installed:
 
     ```console
     export GIT_ACCOUNT=senzing
-    export GIT_REPOSITORY=docker-compose-demo
+    export GIT_REPOSITORY=stream-configuration
     ```
 
 1. Follow steps in [clone-repository](https://github.com/Senzing/knowledge-base/blob/master/HOWTO/clone-repository.md) to install the Git repository.
@@ -120,18 +104,15 @@ If you do not already have an `/opt/senzing` directory on your local system, vis
     ```console
     cd ${GIT_REPOSITORY_DIR}
 
-    sudo \
-      docker-compose --file docker-compose-kafka-sqlite.yaml up
+    sudo docker-compose --file docker-compose-kafka-sqlite.yaml up
     ```
 
 ### View data
 
 1. SQLite is viewable at [localhost:8080](http://localhost:8080).
-    1. The records received from the queue can be viewed in the following Senzing tables:
-        1. G2 > DSRC_RECORD
-        1. G2 > OBS_ENT
+   The table modified by the following `curl` calls is `CFG_DSRC`.
 
-### Test Senzing API
+### Test Senzing configuration API
 
 1. Wait for the following message in the terminal showing docker log.
 
