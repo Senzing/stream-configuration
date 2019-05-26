@@ -123,17 +123,18 @@ To see the options for a subcommand, run commands like:
 The following table indicates the instructions for variations in components.
 
 1. Component variants:
-    1. Queue
-        1. RabbitMQ
-        1. Kafka
+    1. Subcommands
+        1. url
+        1. service
+        1. kafka
+        1. rabbitmq
     1. Database
-        1. Postgres
-        1. MySQL
-        1. Db2
         1. SQLite
 1. Implementations of the docker formation:
 
-    | Queue    | Database   | Instructions | docker-compose.yaml |
-    |----------|------------|:------------:|---------------------|
-    | Kafka    | SQLite     | [:page_facing_up:](docs/docker-compose-kafka-sqlite/README.md) | [docker-compose-kafka-sqlite.yaml](docker-compose-kafka-sqlite.yaml) |
-    | RabbitMQ | SQLite     | [:page_facing_up:](docs/docker-compose-rabbitmq-sqlite/README.md) | [docker-compose-rabbitmq-sqlite.yaml](docker-compose-rabbitmq-sqlite.yaml) |
+    | Subcommand | Database   | Instructions | docker-compose.yaml |
+    |------------|------------|:------------:|---------------------|
+    | url      | SQLite | [:page_facing_up:](docs/docker-compose-url-sqlite/README.md) | [docker-compose-url-sqlite.yaml](docker-compose-url-sqlite.yaml) |
+    | service  | SQLite | [:page_facing_up:](docs/docker-compose-service-sqlite/README.md) | [docker-compose-service-sqlite.yaml](docker-compose-service-sqlite.yaml) |
+    | kafka    | SQLite | [:page_facing_up:](docs/docker-compose-kafka-sqlite/README.md) | [docker-compose-kafka-sqlite.yaml](docker-compose-kafka-sqlite.yaml) |
+    | rabbitmq | SQLite | [:page_facing_up:](docs/docker-compose-rabbitmq-sqlite/README.md) | [docker-compose-rabbitmq-sqlite.yaml](docker-compose-rabbitmq-sqlite.yaml) |

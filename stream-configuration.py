@@ -537,9 +537,9 @@ def create_input_lines_generator_factory(config):
 
     def input_lines_from_url():
         '''A generator for reading lined from a URL-addressable file.'''
-        with urlopen(input_url) as lines:
-            for line in lines:
-                yield line.strip()
+        lines = urlopen(input_url)
+        for line in lines:
+            yield line.strip()
 
     result = None
     input_url = config.get('input_url')
