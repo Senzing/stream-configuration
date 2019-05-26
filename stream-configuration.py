@@ -15,8 +15,7 @@ import six
 import sys
 import time
 import confluent_kafka
-
-# import pika
+import pika
 
 # Python 2 / 3 migration.
 
@@ -33,14 +32,8 @@ except ImportError:
 # Import Senzing libraries.
 
 try:
-#     from G2ConfigTables import G2ConfigTables
-#     from G2Engine import G2Engine
     import G2Exception
     from G2Database import G2Database
-
-#     from G2Product import G2Product
-#     from G2Project import G2Project
-#     from G2Diagnostic import G2Diagnostic
 except ImportError:
     pass
 
@@ -53,7 +46,7 @@ app = Flask(__name__)
 __all__ = []
 __version__ = 1.0
 __date__ = '2019-05-23'
-__updated__ = '2019-05-25'
+__updated__ = '2019-05-26'
 
 SENZING_PRODUCT_ID = "5004"  # See https://github.com/Senzing/knowledge-base/blob/master/lists/senzing-product-ids.md
 log_format = '%(asctime)s %(message)s'
@@ -109,6 +102,26 @@ configuration_locator = {
         "default": 5000,
         "env": "SENZING_PORT",
         "cli": "port"
+    },
+    "rabbitmq_host": {
+        "default": "localhost:5672",
+        "env": "SENZING_RABBITMQ_HOST",
+        "cli": "rabbitmq-host",
+    },
+    "rabbitmq_password": {
+        "default": "bitnami",
+        "env": "SENZING_RABBITMQ_PASSWORD",
+        "cli": "rabbitmq-password",
+    },
+    "rabbitmq_queue": {
+        "default": "senzing-rabbitmq-queue",
+        "env": "SENZING_RABBITMQ_QUEUE",
+        "cli": "rabbitmq-queue",
+    },
+    "rabbitmq_username": {
+        "default": "user",
+        "env": "SENZING_RABBITMQ_USERNAME",
+        "cli": "rabbitmq-username",
     },
     "senzing_dir": {
         "default": "/opt/senzing",
@@ -918,6 +931,19 @@ def http_delete_datasources(id):
     return route(config, request)
 
 # -----------------------------------------------------------------------------
+# RabbitMQ helpers
+# -----------------------------------------------------------------------------
+
+
+def create_on_callback_function(config):
+    ''' Use currying technique to create a rabbitmq callback function.'''
+
+    def on_callback(channel, method, header, body):
+        route(config, body)
+
+    return on_callback
+
+# -----------------------------------------------------------------------------
 # do_* functions
 #   Common function signature: do_XXX(args)
 # -----------------------------------------------------------------------------
@@ -986,12 +1012,55 @@ def do_service(config):
     '''Read from URL-addressable file.'''
 
     common_prolog(config)
-
     host = config.get('host')
     port = config.get('port')
     debug = config.get('debug')
 
     app.run(host=host, port=port, debug=debug)
+
+    # Epilog.
+
+    logging.info(exit_template(config))
+
+
+def do_rabbitmq(config):
+    '''Read from Kafka.'''
+
+    # Perform common initialization tasks.
+
+    common_prolog(config)
+
+    # Get config parameters.
+
+    rabbitmq_queue = config.get("rabbitmq_queue")
+    rabbitmq_username = config.get("rabbitmq_username")
+    rabbitmq_password = config.get("rabbitmq_password")
+    rabbitmq_host = config.get("rabbitmq_host")
+
+    # Create callback function.
+
+    on_callback = create_on_callback_function(config)
+
+    # Connect to RabbitMQ queue.
+
+    try:
+        credentials = pika.PlainCredentials(rabbitmq_username, rabbitmq_password)
+        connection = pika.BlockingConnection(pika.ConnectionParameters(host=rabbitmq_host, credentials=credentials))
+        channel = connection.channel()
+        channel.queue_declare(queue=rabbitmq_queue)
+        channel.basic_qos(prefetch_count=10)
+        channel.basic_consume(rabbitmq_queue, on_callback)
+    except pika.exceptions.AMQPConnectionError as err:
+        exit_error(418, err, rabbitmq_host)
+    except BaseException as err:
+        exit_error(417, err)
+
+    # Start consuming.
+
+    try:
+        channel.start_consuming()
+    except pika.exceptions.ChannelClosed:
+        logging.info(message_info(130, threading.current_thread().name))
 
     # Epilog.
 
