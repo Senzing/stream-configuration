@@ -1,14 +1,13 @@
-# docker-compose-kafka-sqlite
+# docker-compose-rabbitmq-sqlite
 
 ## Overview
 
 This docker formation shows how to modify Senzing configuration using the
-`stream-configuration.py kafka` command.
+`stream-configuration.py rabbitmq` command.
 
 This docker formation brings up the following docker containers:
 
-1. *[bitnami/zookeeper](https://github.com/bitnami/bitnami-docker-zookeeper)*
-1. *[bitnami/kafka](https://github.com/bitnami/bitnami-docker-kafka)*
+1. *[bitnami/rabbitmq](https://github.com/bitnami/bitnami-docker-rabbitmq)*
 1. *[coleifer/sqlite-web](https://github.com/coleifer/sqlite-web)*
 1. *[senzing/mock-data-generator](https://github.com/Senzing/mock-data-generator)*
 1. *[senzing/stream-configuration](https://github.com/Senzing/stream-configuration)*
@@ -106,7 +105,7 @@ If you do not already have an `/opt/senzing` directory on your local system, vis
 
     sudo \
       SENZING_DIR=${SENZING_DIR} \
-      docker-compose --file docker-compose-kafka-sqlite.yaml up
+      docker-compose --file docker-compose-rabbitmq-sqlite.yaml up
     ```
 
 ### View data
@@ -127,7 +126,7 @@ In a separate (or reusable) terminal window:
 
     ```console
     cd ${GIT_REPOSITORY_DIR}
-    sudo docker-compose --file docker-compose-kafka-sqlite.yaml down
+    sudo docker-compose --file docker-compose-rabbitmq-sqlite.yaml down
     ```
 
 1. Delete SENZING_DIR.

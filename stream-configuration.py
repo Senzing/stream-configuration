@@ -15,8 +15,8 @@ import six
 import sys
 import time
 import confluent_kafka
-
-# import pika
+import pika
+from cryptography.hazmat.primitives.asymmetric.padding import PSS
 
 # Python 2 / 3 migration.
 
@@ -33,14 +33,8 @@ except ImportError:
 # Import Senzing libraries.
 
 try:
-#     from G2ConfigTables import G2ConfigTables
-#     from G2Engine import G2Engine
     import G2Exception
     from G2Database import G2Database
-
-#     from G2Product import G2Product
-#     from G2Project import G2Project
-#     from G2Diagnostic import G2Diagnostic
 except ImportError:
     pass
 
@@ -53,7 +47,7 @@ app = Flask(__name__)
 __all__ = []
 __version__ = 1.0
 __date__ = '2019-05-23'
-__updated__ = '2019-05-25'
+__updated__ = '2019-05-26'
 
 SENZING_PRODUCT_ID = "5004"  # See https://github.com/Senzing/knowledge-base/blob/master/lists/senzing-product-ids.md
 log_format = '%(asctime)s %(message)s'
@@ -109,6 +103,26 @@ configuration_locator = {
         "default": 5000,
         "env": "SENZING_PORT",
         "cli": "port"
+    },
+    "rabbitmq_host": {
+        "default": "localhost:5672",
+        "env": "SENZING_RABBITMQ_HOST",
+        "cli": "rabbitmq-host",
+    },
+    "rabbitmq_password": {
+        "default": "bitnami",
+        "env": "SENZING_RABBITMQ_PASSWORD",
+        "cli": "rabbitmq-password",
+    },
+    "rabbitmq_queue": {
+        "default": "senzing-rabbitmq-queue",
+        "env": "SENZING_RABBITMQ_QUEUE",
+        "cli": "rabbitmq-queue",
+    },
+    "rabbitmq_username": {
+        "default": "user",
+        "env": "SENZING_RABBITMQ_USERNAME",
+        "cli": "rabbitmq-username",
     },
     "senzing_dir": {
         "default": "/opt/senzing",
@@ -181,9 +195,9 @@ message_dictionary = {
     "100": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}I",
     "101": "Enter {0}",
     "102": "Exit {0}",
-    "110": "Successfully added CFG_DSRC.DSRC_ID: {0}",
-    "111": "Successfully deleted CFG_DSRC.DSRC_ID: {0}",
-    "112": "Successfully updated CFG_DSRC.DSRC_ID: {0}",
+    "110": "Successfully added {table_name}.{id}: {id_value}",
+    "111": "Successfully deleted {table_name}.{id}: {id_value}",
+    "112": "Successfully updated {table_name}.{id}: {id_value}",
     "197": "Version: {0}  Updated: {1}",
     "198": "For information on warnings and errors, see https://github.com/Senzing/stream-loader#errors",
     "199": "{0}",
@@ -193,6 +207,7 @@ message_dictionary = {
     "401": "Cannot process request. No function for '{0}'.",
     "402": "Cannot process request. Method '{0}' not in {1}",
     "403": "Cannot process request. Key '{0}' not in request.",
+    "418": "Could not connect to RabbitMQ host at {1}. The host name maybe wrong, it may not be ready, or your credentials are incorrect. See the RabbitMQ log for more details. Error: {0}",
     "406": "Cannot find G2Project.ini.",
     "498": "Bad SENZING_SUBCOMMAND: {0}",
     "499": "No processing done.",
@@ -210,6 +225,12 @@ def message(index, *args):
     index_string = str(index)
     template = message_dictionary.get(index_string, "No message for index {0}.".format(index_string))
     return template.format(*args)
+
+
+def message_kwargs(index, **kwargs):
+    index_string = str(index)
+    template = message_dictionary.get(index_string, "No message for index {0}.".format(index_string))
+    return template.format(**kwargs)
 
 
 def message_generic(generic_index, index, *args):
@@ -565,17 +586,30 @@ def create_input_lines_generator_factory(config):
 
 sql_dictionary = {
 
+    # 11x SQL statements.
+
+    "112": "insert into {table_name} ({column_list}) values ({value_list})",
+    "113": "update {table_name} set {update_list} where {id} = {id_value}",
+    "114": "delete from {table_name} where {id} = {id_value}",
+
+    # 12x Select statements.
+
+    "121": "select {column_list} from '{table_name}'",
+    "122": "select * from '{table_name}' where {id} = {id_value}",
+    "123": "select max({id}) as {id} from '{table_name}'",
+
     # 11x CFG_DSRC SQL statements.
 
-    "110": "select DSRC_ID, DSRC_CODE, DSRC_DESC, DSRC_RELY, RETENTION_LEVEL, CONVERSATIONAL from 'CFG_DSRC'",
-    "111": "select * from 'CFG_DSRC' where DSRC_ID = {0}",
-    "112": "insert into CFG_DSRC (DSRC_ID, DSRC_CODE, DSRC_DESC, DSRC_RELY, RETENTION_LEVEL, CONVERSATIONAL) values ({DSRC_ID}, \"{DSRC_CODE}\", \"{DSRC_DESC}\", {DSRC_RELY}, \"{RETENTION_LEVEL}\", \"{CONVERSATIONAL}\")",
-    "113": "update CFG_DSRC set {0} where DSRC_ID = {1}",
-    "119": "delete from CFG_DSRC where DSRC_ID = {0}",
+    "210": "select DSRC_ID, DSRC_CODE, DSRC_DESC, DSRC_RELY, RETENTION_LEVEL, CONVERSATIONAL from 'CFG_DSRC'",
+    "211": "insert into CFG_DSRC (DSRC_ID, DSRC_CODE, DSRC_DESC, DSRC_RELY, RETENTION_LEVEL, CONVERSATIONAL) values ({DSRC_ID}, \"{DSRC_CODE}\", \"{DSRC_DESC}\", {DSRC_RELY}, \"{RETENTION_LEVEL}\", \"{CONVERSATIONAL}\")",
+
+    # 12x CFG_ETYPE SQL statements.
+
+    "220": "select ETYPE_ID, ETYPE_CODE, ETYPE_DESC, ECLASS_ID from 'CFG_ETYPE'",
+    "221": "insert into CFG_ETYPE (ETYPE_ID, ETYPE_CODE, ETYPE_DESC, ECLASS_ID) values ({ETYPE_ID}, \"{ETYPE_CODE}\", \"{ETYPE_DESC}\", {ECLASS_ID}\")",
 
     # Generic SQL statements.
 
-    "801": "select max({0}) as {0} from '{1}'",
 }
 
 
@@ -650,6 +684,132 @@ def database_select_single_row(config, sql):
     return g2_database.fetchNext(sql_cursor)
 
 # -----------------------------------------------------------------------------
+# Database routines.
+# database_*(config, table_metadata)
+# -----------------------------------------------------------------------------
+
+
+def database_delete_by_id(config, table_metadata):
+    sql = sql_dictionary.get('114').format(**table_metadata)
+    sql_result = database_exec(config, sql)
+    result = {
+        'returnCode': 0,
+        'messageId': message(MESSAGE_INFO, 111),
+        'message': message_kwargs(111, **table_metadata),
+        'request': table_metadata.get('request', {}),
+    }
+    return result
+
+
+def database_insert(config, table_metadata):
+    request = table_metadata.get('request', {})
+    defaults = table_metadata.get('defaults', {})
+    id = table_metadata.get('id')
+
+    # Verify input request.
+
+    if id not in request:
+        return missing_key(id, request)
+
+    # Find next ID.
+
+    max_id = database_max_id(config, table_metadata)
+    defaults[id] = max(999, max_id) + 1
+
+    # Add defaults to insert.
+
+    defaults.update(request)
+
+    # Calculate column and values list.
+
+    columns = []
+    values = []
+    for column, value in defaults.items():
+        columns.append(column)
+        if isinstance(value, six.string_types):
+            value = "\"{0}\"".format(value)
+        elif isinstance(value, six.integer_types):
+            value = str(value)
+        values.append(value)
+    table_metadata['column_list'] = ', '.join(columns)
+    table_metadata['value_list'] = ', '.join(values)
+
+    # Insert into database.
+
+    sql = sql_dictionary.get('112').format(**table_metadata)
+    sql_result = database_exec(config, sql)
+
+    # Construct and return result.
+
+    result = {
+        'returnCode': 0,
+        'messageId': message(MESSAGE_INFO, 110),
+        'message': message_kwargs(110, **table_metadata),
+        'request': request,
+    }
+
+    return result
+
+
+def database_max_id(config, table_metadata):
+    sql = sql_dictionary.get('123').format(**table_metadata)
+    row = database_select_single_row(config, sql)
+    return row.get(table_metadata.get('id'), 0)
+
+
+def database_select_all(config, table_metadata):
+    result = []
+    sql = sql_dictionary.get('121').format(**table_metadata)
+    for row in database_select(config, sql):
+        result.append(row)
+    return result
+
+
+def database_select_by_id(config, table_metadata):
+    sql = sql_dictionary.get('122').format(**table_metadata)
+    for row in database_select(config, sql):
+        return row
+
+
+def database_update_by_id(config, table_metadata):
+    request = table_metadata.get('request', {})
+    id = table_metadata.get('id')
+
+    # Verify input request.
+
+    if id not in request:
+        return missing_key(id, request)
+
+    # Remove ID from request.
+
+    table_metadata['id_value'] = request.pop(id)
+
+    # Calculate SQL "set" clause.
+
+    update_list = []
+    for key, value in request.items():
+        if isinstance(value, six.string_types):
+            value = "\"{0}\"".format(value)
+        update_list.append("{0} = {1}".format(key, value))
+    table_metadata['update_list'] = ", ".join(update_list)
+
+    # Construct and execute SQL statement.
+
+    sql = sql_dictionary.get('113').format(**table_metadata)
+    sql_result = database_exec(config, sql)
+
+    # Construct and return result.
+
+    result = {
+        'returnCode': 0,
+        'messageId': message(MESSAGE_INFO, 211),
+        'message': message_kwargs(112, **table_metadata),
+        'request': request,
+    }
+
+    return result
+
+# -----------------------------------------------------------------------------
 # Error reporting.
 # -----------------------------------------------------------------------------
 
@@ -688,6 +848,55 @@ def bad_function(request, function):
     return result
 
 # -----------------------------------------------------------------------------
+# get_table_metadata_*
+# -----------------------------------------------------------------------------
+
+
+def post_process_table_metadata(result):
+    result['column_list'] = ', '.join(result.get('columns'))
+    return result
+
+
+def get_table_metadata_cfg_dsrc():
+    result = {
+        "columns": [
+            "DSRC_ID",
+            "DSRC_CODE",
+            "DSRC_DESC",
+            "DSRC_RELY",
+            "RETENTION_LEVEL",
+            "CONVERSATIONAL",
+        ],
+        "defaults": {
+            "DSRC_RELY": 1,
+            "RETENTION_LEVEL": "Remember",
+            "CONVERSATIONAL": "No",
+        },
+        "id": "DSRC_ID",
+        "id_value": 0,
+        "table_name": "CFG_DSRC",
+    }
+    return post_process_table_metadata(result)
+
+
+def get_table_metadata_cfg_etype():
+    result = {
+        "columns": [
+            "ETYPE_ID",
+            "ETYPE_CODE",
+            "ETYPE_DESC",
+            "ECLASS_ID",
+        ],
+        "defaults": {
+            "ECLASS_ID": 1,
+        },
+        "id": "ETYPE_ID",
+        "id_value": 0,
+        "table_name": "CFG_ETYPE",
+    }
+    return post_process_table_metadata(result)
+
+# -----------------------------------------------------------------------------
 # handle_* functions
 # Input parameters:
 #   - config is the dictionary with the configuration.
@@ -695,119 +904,78 @@ def bad_function(request, function):
 # Output: a dictionary.
 # -----------------------------------------------------------------------------
 
+
+def handle_post(config, request, table_metadata):
+    table_metadata['request'] = request
+    return database_insert(config, table_metadata)
+
+
+def handle_put(config, request, table_metadata):
+    table_metadata['id_value'] = request.get(table_metadata.get('id'))
+    table_metadata['request'] = request
+    return database_update_by_id(config, table_metadata)
+
+
+def handle_get(config, request, table_metadata):
+    return database_select_all(config, table_metadata)
+
+
+def handle_get_single(config, request, table_metadata):
+    table_metadata['id_value'] = request.get(table_metadata.get('id'))
+    return database_select_by_id(config, table_metadata)
+
+
+def handle_delete(config, request, table_metadata):
+    table_metadata['id_value'] = request.get(table_metadata.get('id'))
+    return database_delete_by_id(config, table_metadata)
+
 # ----- datasource ------------------------------------------------------------
 
 
 def handle_post_datasources(config, request):
-    result = {}
-
-    # Verify input request.
-
-    if 'DSRC_CODE' not in request:
-        return missing_key('DSRC_CODE', request)
-
-    # Find next ID.
-
-    sql = sql_dictionary.get('801').format('DSRC_ID', 'CFG_DSRC')
-    current_id_row = database_select_single_row(config, sql)
-    current_id = max(999, current_id_row.get("DSRC_ID", 0))
-    next_id = current_id + 1
-
-    # Add defaults.
-
-    defaults = {
-        "DSRC_ID": next_id,
-        "DSRC_DESC": request.get('DSRC_CODE', ""),
-        "DSRC_RELY": 1,
-        "RETENTION_LEVEL": "Remember",
-        "CONVERSATIONAL": "No",
-    }
-
-    for key, value in defaults.items():
-        if key not in request:
-            request[key] = value
-
-    # Insert into database.
-
-    sql = sql_dictionary.get('112').format(**request)
-    sql_result = database_exec(config, sql)
-
-    # Construct and return result.
-
-    result = {
-        'returnCode': 0,
-        'messageId': message(MESSAGE_INFO, 110),
-        'message': message(110, request.get('DSRC_ID')),
-        'request': request,
-    }
-
-    return result
+    table_metadata = get_table_metadata_cfg_dsrc()
+    table_metadata['defaults']['DSRC_DESC'] = request.get('DSRC_CODE', "")
+    return handle_post(config, request, table_metadata)
 
 
 def handle_put_datasources(config, request):
-    result = {}
-
-    # Verify input request.
-
-    if 'DSRC_ID' not in request:
-        return missing_key('DSRC_ID', request)
-
-    # Remove DSRC_ID from request.
-
-    id = request.pop('DSRC_ID')
-
-    # Calculate SQL "set" clause.
-
-    set_clause = []
-    for key, value in request.items():
-        if isinstance(value, six.string_types):
-            value = "\"{0}\"".format(value)
-        set_clause.append("{0} = {1}".format(key, value))
-
-    # Construct and execute SQL statement.
-
-    sql = sql_dictionary.get('113').format(", ".join(set_clause), id)
-    sql_result = database_exec(config, sql)
-
-    # Construct and return result.
-
-    result = {
-        'returnCode': 0,
-        'messageId': message(MESSAGE_INFO, 112),
-        'message': message(112, id),
-        'request': request,
-    }
-
-    return result
+    return handle_put(config, request, get_table_metadata_cfg_dsrc())
 
 
 def handle_get_datasources(config, request):
-    result = []
-    sql = sql_dictionary.get('110')
-    for row in database_select(config, sql):
-        result.append(row)
-    return result
+    return handle_get(config, request, get_table_metadata_cfg_dsrc())
 
 
 def handle_get_datasource(config, request):
-    row_id = request.get('DSRC_ID')
-    sql = sql_dictionary.get('111').format(row_id)
-    for row in database_select(config, sql):
-        return row
+    return handle_get_single(config, request, get_table_metadata_cfg_dsrc())
 
 
 def handle_delete_datasources(config, request):
-    row_id = request.get('DSRC_ID')
-    sql = sql_dictionary.get('119').format(row_id)
-    result = database_exec(config, sql)
-    print(result)
-    result = {
-        'returnCode': 0,
-        'messageId': message(MESSAGE_INFO, 111),
-        'message': message(111, row_id),
-        'request': request,
-    }
-    return result
+    return handle_delete(config, request, get_table_metadata_cfg_dsrc())
+
+# ----- entitytype ------------------------------------------------------------
+
+
+def handle_post_entitytypes(config, request):
+    table_metadata = get_table_metadata_cfg_etype()
+    table_metadata['defaults']['ETYPE_DESC'] = request.get('ETYPE_CODE', "")
+    return handle_post(config, request, table_metadata)
+
+
+def handle_put_entitytypes(config, request):
+    return handle_put(config, request, get_table_metadata_cfg_etype())
+
+
+def handle_get_entitytypes(config, request):
+    return handle_get(config, request, get_table_metadata_cfg_etype())
+
+
+def handle_get_entitytype(config, request):
+    return handle_get_single(config, request, get_table_metadata_cfg_etype())
+
+
+def handle_delete_entitytypes(config, request):
+    return handle_delete(config, request, get_table_metadata_cfg_etype())
 
 # -----------------------------------------------------------------------------
 # message router
@@ -852,6 +1020,70 @@ def route(config, message_dictionary):
 def http_post_generic():
     config = get_config()
     return route(config, flask_request.json)
+
+# ----- entitytypes -----------------------------------------------------------
+
+
+@app.route("/entitytypes", methods=['POST'])
+def http_post_entitytype():
+    config = get_config()
+    request = {
+        "method": "post",
+        "object": "entitytypes",
+        "request": flask_request.json
+    }
+    return route(config, request)
+
+
+@app.route("/entitytypes/<id>", methods=['PUT'])
+def http_put_entitytype(id):
+    config = get_config()
+    request = {
+        "ETYPE_ID": id,
+    }
+    request.update(flask_request.json)
+    request = {
+        "method": "put",
+        "object": "entitytypes",
+        "request": request
+    }
+    return route(config, request)
+
+
+@app.route("/entitytypes", methods=['GET'])
+def http_get_entitytypes():
+    config = get_config()
+    request = {
+        "method": "get",
+        "object": "entitytypes"
+    }
+    return route(config, request)
+
+
+@app.route("/entitytypes/<id>", methods=['GET'])
+def http_get_entitytype(id):
+    config = get_config()
+    request = {
+        "method": "get",
+        "object": "entitytype",
+        "request": {
+            "ETYPE_ID": id,
+        }
+    }
+    return route(config, request)
+
+
+@app.route("/entitytypes/<id>", methods=['DELETE'])
+def http_delete_entitytypes(id):
+    config = get_config()
+    request = {
+        "method": "delete",
+        "object": "entitytypes",
+        "request": {
+            "ETYPE_ID": id,
+        }
+    }
+    return route(config, request)
 
 # ----- datasources -----------------------------------------------------------
 
@@ -916,6 +1148,20 @@ def http_delete_datasources(id):
         }
     }
     return route(config, request)
+
+# -----------------------------------------------------------------------------
+# RabbitMQ helpers
+# -----------------------------------------------------------------------------
+
+
+def create_on_callback_function(config):
+    ''' Use currying technique to create a rabbitmq callback function.'''
+
+    def on_callback(channel, method, header, body):
+        message = json.loads(body)
+        route(config, message)
+
+    return on_callback
 
 # -----------------------------------------------------------------------------
 # do_* functions
@@ -986,12 +1232,55 @@ def do_service(config):
     '''Read from URL-addressable file.'''
 
     common_prolog(config)
-
     host = config.get('host')
     port = config.get('port')
     debug = config.get('debug')
 
     app.run(host=host, port=port, debug=debug)
+
+    # Epilog.
+
+    logging.info(exit_template(config))
+
+
+def do_rabbitmq(config):
+    '''Read from Kafka.'''
+
+    # Perform common initialization tasks.
+
+    common_prolog(config)
+
+    # Get config parameters.
+
+    rabbitmq_queue = config.get("rabbitmq_queue")
+    rabbitmq_username = config.get("rabbitmq_username")
+    rabbitmq_password = config.get("rabbitmq_password")
+    rabbitmq_host = config.get("rabbitmq_host")
+
+    # Create callback function.
+
+    on_callback = create_on_callback_function(config)
+
+    # Connect to RabbitMQ queue.
+
+#     try:
+    credentials = pika.PlainCredentials(rabbitmq_username, rabbitmq_password)
+    connection = pika.BlockingConnection(pika.ConnectionParameters(host=rabbitmq_host, credentials=credentials))
+    channel = connection.channel()
+    channel.queue_declare(queue=rabbitmq_queue)
+    channel.basic_qos(prefetch_count=10)
+    channel.basic_consume(queue=rabbitmq_queue, on_message_callback=on_callback)
+#     except pika.exceptions.AMQPConnectionError as err:
+#         exit_error(418, err, rabbitmq_host)
+#     except BaseException as err:
+#         exit_error(417, err)
+
+    # Start consuming.
+
+    try:
+        channel.start_consuming()
+    except pika.exceptions.ChannelClosed:
+        logging.info(message_info(130, threading.current_thread().name))
 
     # Epilog.
 
