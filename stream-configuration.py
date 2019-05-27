@@ -227,6 +227,12 @@ def message(index, *args):
     return template.format(*args)
 
 
+def message_kwargs(index, **kwargs):
+    index_string = str(index)
+    template = message_dictionary.get(index_string, "No message for index {0}.".format(index_string))
+    return template.format(**kwargs)
+
+
 def message_generic(generic_index, index, *args):
     returnCode = 0
     if index >= MESSAGE_WARN:
@@ -582,7 +588,7 @@ sql_dictionary = {
 
     # 11x SQL statements.
 
-    "112": "insert into {table_name} ({column_list}) values ({value__list})",
+    "112": "insert into {table_name} ({column_list}) values ({value_list})",
     "113": "update {table_name} set {update_list} where {id} = {id_value}",
     "114": "delete from {table_name} where {id} = {id_value}",
 
@@ -590,7 +596,7 @@ sql_dictionary = {
 
     "121": "select {column_list} from '{table_name}'",
     "122": "select * from '{table_name}' where {id} = {id_value}",
-    "123": "select max({0}) as {0} from '{1}'",
+    "123": "select max({id}) as {id} from '{table_name}'",
 
     # 11x CFG_DSRC SQL statements.
 
@@ -689,8 +695,8 @@ def database_delete_by_id(config, table_metadata):
     result = {
         'returnCode': 0,
         'messageId': message(MESSAGE_INFO, 111),
-        'message': message(111, **table_metadata),
-        'request': request,
+        'message': message_kwargs(111, **table_metadata),
+        'request': table_metadata.get('request', {}),
     }
     return result
 
@@ -718,13 +724,15 @@ def database_insert(config, table_metadata):
 
     columns = []
     values = []
-    for column, value in defaults:
+    for column, value in defaults.items():
         columns.append(column)
         if isinstance(value, six.string_types):
             value = "\"{0}\"".format(value)
+        elif isinstance(value, six.integer_types):
+            value = str(value)
         values.append(value)
-    table_metadata['column_list'] = ", ".format(columns)
-    table_metadata['value_list'] = ", ".format(values)
+    table_metadata['column_list'] = ', '.join(columns)
+    table_metadata['value_list'] = ', '.join(values)
 
     # Insert into database.
 
@@ -736,7 +744,7 @@ def database_insert(config, table_metadata):
     result = {
         'returnCode': 0,
         'messageId': message(MESSAGE_INFO, 110),
-        'message': message(110, **table_metadata),
+        'message': message_kwargs(110, **table_metadata),
         'request': request,
     }
 
@@ -795,7 +803,7 @@ def database_update_by_id(config, table_metadata):
     result = {
         'returnCode': 0,
         'messageId': message(MESSAGE_INFO, 211),
-        'message': message(112, **table_metadata),
+        'message': message_kwargs(112, **table_metadata),
         'request': request,
     }
 
@@ -844,6 +852,11 @@ def bad_function(request, function):
 # -----------------------------------------------------------------------------
 
 
+def post_process_table_metadata(result):
+    result['column_list'] = ', '.join(result.get('columns'))
+    return result
+
+
 def get_table_metadata_cfg_dsrc():
     result = {
         "columns": [
@@ -863,7 +876,25 @@ def get_table_metadata_cfg_dsrc():
         "id_value": 0,
         "table_name": "CFG_DSRC",
     }
-    return result
+    return post_process_table_metadata(result)
+
+
+def get_table_metadata_cfg_etype():
+    result = {
+        "columns": [
+            "ETYPE_ID",
+            "ETYPE_CODE",
+            "ETYPE_DESC",
+            "ECLASS_ID",
+        ],
+        "defaults": {
+            "ECLASS_ID": 1,
+        },
+        "id": "ETYPE_ID",
+        "id_value": 0,
+        "table_name": "CFG_ETYPE",
+    }
+    return post_process_table_metadata(result)
 
 # -----------------------------------------------------------------------------
 # handle_* functions
@@ -873,195 +904,78 @@ def get_table_metadata_cfg_dsrc():
 # Output: a dictionary.
 # -----------------------------------------------------------------------------
 
-# ----- datasource ------------------------------------------------------------
 
-
-def handle_post_datasources(config, request):
-    result = {}
-
-    # Verify input request.
-
-    if 'DSRC_CODE' not in request:
-        return missing_key('DSRC_CODE', request)
-
-    table_metadata = get_table_metadata_cfg_dsrc()
-
-    # Find next ID.
-
-    max_id = database_max_id(config, table_metadata)
-    next_id = max(999, max_id) + 1
-
-    # Add defaults.
-
-    defaults = {
-        "DSRC_ID": next_id,
-        "DSRC_DESC": request.get('DSRC_CODE', ""),
-        "DSRC_RELY": 1,
-        "RETENTION_LEVEL": "Remember",
-        "CONVERSATIONAL": "No",
-    }
-
-    for key, value in defaults.items():
-        if key not in request:
-            request[key] = value
-
-    # Insert into database.
-
-    sql = sql_dictionary.get('211').format(**request)
-    sql_result = database_exec(config, sql)
-
-    # Construct and return result.
-
-    result = {
-        'returnCode': 0,
-        'messageId': message(MESSAGE_INFO, 110),
-        'message': message(110, 'CFG_DSRC', 'DSRC_ID', request.get('DSRC_ID')),
-        'request': request,
-    }
-
-    return result
-
-
-def handle_post_datasources(config, request):
-    table_metadata = get_table_metadata_cfg_dsrc()
+def handle_post(config, request, table_metadata):
     table_metadata['request'] = request
-    table_metadata['defaults']['DSRC_DESC'] = request.get('DSRC_CODE', "")
     return database_insert(config, table_metadata)
 
 
-def handle_put_datasources(config, request):
-    table_metadata = get_table_metadata_cfg_dsrc()
+def handle_put(config, request, table_metadata):
     table_metadata['id_value'] = request.get(table_metadata.get('id'))
     table_metadata['request'] = request
     return database_update_by_id(config, table_metadata)
 
 
-def handle_get_datasources(config, request):
-    table_metadata = get_table_metadata_cfg_dsrc()
+def handle_get(config, request, table_metadata):
     return database_select_all(config, table_metadata)
 
 
-def handle_get_datasource(config, request):
-    table_metadata = get_table_metadata_cfg_dsrc()
+def handle_get_single(config, request, table_metadata):
     table_metadata['id_value'] = request.get(table_metadata.get('id'))
     return database_select_by_id(config, table_metadata)
 
 
-def handle_delete_datasources(config, request):
-    table_metadata = get_table_metadata_cfg_dsrc()
+def handle_delete(config, request, table_metadata):
     table_metadata['id_value'] = request.get(table_metadata.get('id'))
     return database_delete_by_id(config, table_metadata)
+
+# ----- datasource ------------------------------------------------------------
+
+
+def handle_post_datasources(config, request):
+    table_metadata = get_table_metadata_cfg_dsrc()
+    table_metadata['defaults']['DSRC_DESC'] = request.get('DSRC_CODE', "")
+    return handle_post(config, request, table_metadata)
+
+
+def handle_put_datasources(config, request):
+    return handle_put(config, request, get_table_metadata_cfg_dsrc())
+
+
+def handle_get_datasources(config, request):
+    return handle_get(config, request, get_table_metadata_cfg_dsrc())
+
+
+def handle_get_datasource(config, request):
+    return handle_get_single(config, request, get_table_metadata_cfg_dsrc())
+
+
+def handle_delete_datasources(config, request):
+    return handle_delete(config, request, get_table_metadata_cfg_dsrc())
 
 # ----- entitytype ------------------------------------------------------------
 
 
 def handle_post_entitytypes(config, request):
-    result = {}
-
-    # Verify input request.
-
-    if 'ETYPE_CODE' not in request:
-        return missing_key('ETYPE_CODE', request)
-
-    # Find next ID.
-
-    sql = sql_dictionary.get('123').format('ETYPE_ID', 'CFG_ETYPE')
-    current_id_row = database_select_single_row(config, sql)
-    current_id = max(999, current_id_row.get("ETYPE_ID", 0))
-    next_id = current_id + 1
-
-    # Add defaults.
-
-    defaults = {
-        "ETYPE_ID": next_id,
-        "ETYPE_DESC": request.get('ETYPE_CODE', ""),
-        "ECLASS_ID": 1,
-    }
-
-    for key, value in defaults.items():
-        if key not in request:
-            request[key] = value
-
-    # Insert into database.
-
-    sql = sql_dictionary.get('221').format(**request)
-    sql_result = database_exec(config, sql)
-
-    # Construct and return result.
-
-    result = {
-        'returnCode': 0,
-        'messageId': message(MESSAGE_INFO, 110),
-        'message': message(110, 'CFG_ETYPE', 'ETYPE_ID', request.get('ETYPE_ID')),
-        'request': request,
-    }
-
-    return result
+    table_metadata = get_table_metadata_cfg_etype()
+    table_metadata['defaults']['ETYPE_DESC'] = request.get('ETYPE_CODE', "")
+    return handle_post(config, request, table_metadata)
 
 
 def handle_put_entitytypes(config, request):
-    result = {}
-
-    # Verify input request.
-
-    if 'ETYPE_ID' not in request:
-        return missing_key('ETYPE_ID', request)
-
-    # Remove ETYPE_ID from request.
-
-    id = request.pop('ETYPE_ID')
-
-    # Calculate SQL "set" clause.
-
-    set_clause = []
-    for key, value in request.items():
-        if isinstance(value, six.string_types):
-            value = "\"{0}\"".format(value)
-        set_clause.append("{0} = {1}".format(key, value))
-
-    # Construct and execute SQL statement.
-
-    sql = sql_dictionary.get('223').format(", ".join(set_clause), id)
-    sql_result = database_exec(config, sql)
-
-    # Construct and return result.
-
-    result = {
-        'returnCode': 0,
-        'messageId': message(MESSAGE_INFO, 112),
-        'message': message(112, 'CFG_ETYPE', 'ETYPE_ID', id),
-        'request': request,
-    }
-
-    return result
+    return handle_put(config, request, get_table_metadata_cfg_etype())
 
 
 def handle_get_entitytypes(config, request):
-    result = []
-    sql = sql_dictionary.get('220')
-    for row in database_select(config, sql):
-        result.append(row)
-    return result
+    return handle_get(config, request, get_table_metadata_cfg_etype())
 
 
 def handle_get_entitytype(config, request):
-    row_id = request.get('ETYPE_ID')
-    sql = sql_dictionary.get('221').format(row_id)
-    for row in database_select(config, sql):
-        return row
+    return handle_get_single(config, request, get_table_metadata_cfg_etype())
 
 
 def handle_delete_entitytypes(config, request):
-    row_id = request.get('ETYPE_ID')
-    sql = sql_dictionary.get('229').format(row_id)
-    sql_result = database_exec(config, sql)
-    result = {
-        'returnCode': 0,
-        'messageId': message(MESSAGE_INFO, 111),
-        'message': message(111, 'CFG_ETYPE', 'ETYPE_ID', row_id),
-        'request': request,
-    }
-    return result
+    return handle_delete(config, request, get_table_metadata_cfg_etype())
 
 # -----------------------------------------------------------------------------
 # message router
@@ -1106,6 +1020,70 @@ def route(config, message_dictionary):
 def http_post_generic():
     config = get_config()
     return route(config, flask_request.json)
+
+# ----- entitytypes -----------------------------------------------------------
+
+
+@app.route("/entitytypes", methods=['POST'])
+def http_post_entitytype():
+    config = get_config()
+    request = {
+        "method": "post",
+        "object": "entitytypes",
+        "request": flask_request.json
+    }
+    return route(config, request)
+
+
+@app.route("/entitytypes/<id>", methods=['PUT'])
+def http_put_entitytype(id):
+    config = get_config()
+    request = {
+        "ETYPE_ID": id,
+    }
+    request.update(flask_request.json)
+    request = {
+        "method": "put",
+        "object": "entitytypes",
+        "request": request
+    }
+    return route(config, request)
+
+
+@app.route("/entitytypes", methods=['GET'])
+def http_get_entitytypes():
+    config = get_config()
+    request = {
+        "method": "get",
+        "object": "entitytypes"
+    }
+    return route(config, request)
+
+
+@app.route("/entitytypes/<id>", methods=['GET'])
+def http_get_entitytype(id):
+    config = get_config()
+    request = {
+        "method": "get",
+        "object": "entitytype",
+        "request": {
+            "ETYPE_ID": id,
+        }
+    }
+    return route(config, request)
+
+
+@app.route("/entitytypes/<id>", methods=['DELETE'])
+def http_delete_entitytypes(id):
+    config = get_config()
+    request = {
+        "method": "delete",
+        "object": "entitytypes",
+        "request": {
+            "ETYPE_ID": id,
+        }
+    }
+    return route(config, request)
 
 # ----- datasources -----------------------------------------------------------
 
