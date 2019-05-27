@@ -47,7 +47,7 @@ app = Flask(__name__)
 __all__ = []
 __version__ = 1.0
 __date__ = '2019-05-23'
-__updated__ = '2019-05-26'
+__updated__ = '2019-05-27'
 
 SENZING_PRODUCT_ID = "5004"  # See https://github.com/Senzing/knowledge-base/blob/master/lists/senzing-product-ids.md
 log_format = '%(asctime)s %(message)s'
@@ -585,31 +585,12 @@ def create_input_lines_generator_factory(config):
 
 
 sql_dictionary = {
-
-    # 11x SQL statements.
-
     "112": "insert into {table_name} ({column_list}) values ({value_list})",
     "113": "update {table_name} set {update_list} where {id} = {id_value}",
     "114": "delete from {table_name} where {id} = {id_value}",
-
-    # 12x Select statements.
-
     "121": "select {column_list} from '{table_name}'",
     "122": "select * from '{table_name}' where {id} = {id_value}",
     "123": "select max({id}) as {id} from '{table_name}'",
-
-    # 11x CFG_DSRC SQL statements.
-
-    "210": "select DSRC_ID, DSRC_CODE, DSRC_DESC, DSRC_RELY, RETENTION_LEVEL, CONVERSATIONAL from 'CFG_DSRC'",
-    "211": "insert into CFG_DSRC (DSRC_ID, DSRC_CODE, DSRC_DESC, DSRC_RELY, RETENTION_LEVEL, CONVERSATIONAL) values ({DSRC_ID}, \"{DSRC_CODE}\", \"{DSRC_DESC}\", {DSRC_RELY}, \"{RETENTION_LEVEL}\", \"{CONVERSATIONAL}\")",
-
-    # 12x CFG_ETYPE SQL statements.
-
-    "220": "select ETYPE_ID, ETYPE_CODE, ETYPE_DESC, ECLASS_ID from 'CFG_ETYPE'",
-    "221": "insert into CFG_ETYPE (ETYPE_ID, ETYPE_CODE, ETYPE_DESC, ECLASS_ID) values ({ETYPE_ID}, \"{ETYPE_CODE}\", \"{ETYPE_DESC}\", {ECLASS_ID}\")",
-
-    # Generic SQL statements.
-
 }
 
 
@@ -802,7 +783,7 @@ def database_update_by_id(config, table_metadata):
 
     result = {
         'returnCode': 0,
-        'messageId': message(MESSAGE_INFO, 211),
+        'messageId': message(MESSAGE_INFO, 112),
         'message': message_kwargs(112, **table_metadata),
         'request': request,
     }
