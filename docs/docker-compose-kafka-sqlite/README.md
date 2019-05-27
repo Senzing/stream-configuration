@@ -104,7 +104,9 @@ If you do not already have an `/opt/senzing` directory on your local system, vis
     ```console
     cd ${GIT_REPOSITORY_DIR}
 
-    sudo docker-compose --file docker-compose-kafka-sqlite.yaml up
+    sudo \
+      SENZING_DIR=${SENZING_DIR} \
+      docker-compose --file docker-compose-kafka-sqlite.yaml up
     ```
 
 ### View data

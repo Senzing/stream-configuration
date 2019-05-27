@@ -137,3 +137,4 @@ The following table indicates the instructions for variations in components.
     | url      | SQLite | [:page_facing_up:](docs/docker-compose-url-sqlite/README.md) | [docker-compose-url-sqlite.yaml](docker-compose-url-sqlite.yaml) |
     | service  | SQLite | [:page_facing_up:](docs/docker-compose-service-sqlite/README.md) | [docker-compose-service-sqlite.yaml](docker-compose-service-sqlite.yaml) |
     | kafka    | SQLite | [:page_facing_up:](docs/docker-compose-kafka-sqlite/README.md) | [docker-compose-kafka-sqlite.yaml](docker-compose-kafka-sqlite.yaml) |
+    | rabbitmq | SQLite | [:page_facing_up:](docs/docker-compose-rabbitmq-sqlite/README.md) | [docker-compose-rabbitmq-sqlite.yaml](docker-compose-rabbitmq-sqlite.yaml) |

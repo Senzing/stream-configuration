@@ -2,7 +2,7 @@ version: '3'
 services:
 
   rabbitmq:
-    image: bitnami/rabbitmq:latest
+    image: bitnami/rabbitmq:3.7
     container_name: senzing-rabbitmq
     environment:
       RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-user}
@@ -13,8 +13,6 @@ services:
       - 15672:15672
       - 5672:5672
     restart: always
-    volumes:
-      - ${RABBITMQ_STORAGE:-/storage/docker/senzing/docker-compose-rabbitmq-sqlite/rabbitmq}:/bitnami
 
   mockdata:
     image: senzing/mock-data-generator
