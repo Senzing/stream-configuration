@@ -47,7 +47,7 @@ app = Flask(__name__)
 __all__ = []
 __version__ = 1.0
 __date__ = '2019-05-23'
-__updated__ = '2019-05-26'
+__updated__ = '2019-05-28'
 
 SENZING_PRODUCT_ID = "5004"  # See https://github.com/Senzing/knowledge-base/blob/master/lists/senzing-product-ids.md
 log_format = '%(asctime)s %(message)s'
@@ -585,31 +585,12 @@ def create_input_lines_generator_factory(config):
 
 
 sql_dictionary = {
-
-    # 11x SQL statements.
-
     "112": "insert into {table_name} ({column_list}) values ({value_list})",
     "113": "update {table_name} set {update_list} where {id} = {id_value}",
     "114": "delete from {table_name} where {id} = {id_value}",
-
-    # 12x Select statements.
-
     "121": "select {column_list} from '{table_name}'",
     "122": "select * from '{table_name}' where {id} = {id_value}",
     "123": "select max({id}) as {id} from '{table_name}'",
-
-    # 11x CFG_DSRC SQL statements.
-
-    "210": "select DSRC_ID, DSRC_CODE, DSRC_DESC, DSRC_RELY, RETENTION_LEVEL, CONVERSATIONAL from 'CFG_DSRC'",
-    "211": "insert into CFG_DSRC (DSRC_ID, DSRC_CODE, DSRC_DESC, DSRC_RELY, RETENTION_LEVEL, CONVERSATIONAL) values ({DSRC_ID}, \"{DSRC_CODE}\", \"{DSRC_DESC}\", {DSRC_RELY}, \"{RETENTION_LEVEL}\", \"{CONVERSATIONAL}\")",
-
-    # 12x CFG_ETYPE SQL statements.
-
-    "220": "select ETYPE_ID, ETYPE_CODE, ETYPE_DESC, ECLASS_ID from 'CFG_ETYPE'",
-    "221": "insert into CFG_ETYPE (ETYPE_ID, ETYPE_CODE, ETYPE_DESC, ECLASS_ID) values ({ETYPE_ID}, \"{ETYPE_CODE}\", \"{ETYPE_DESC}\", {ECLASS_ID}\")",
-
-    # Generic SQL statements.
-
 }
 
 
@@ -706,10 +687,10 @@ def database_insert(config, table_metadata):
     defaults = table_metadata.get('defaults', {})
     id = table_metadata.get('id')
 
-    # Verify input request.
+    # If ID is not a positive integer less than 1000, just remove it.
 
-    if id not in request:
-        return missing_key(id, request)
+    if (id in request) and (request.get(id, 0) < 1000):
+        request.pop(id)
 
     # Find next ID.
 
@@ -731,6 +712,10 @@ def database_insert(config, table_metadata):
         elif isinstance(value, six.integer_types):
             value = str(value)
         values.append(value)
+
+    # Update table_metadata.
+
+    table_metadata['id_value'] = defaults.get(id)
     table_metadata['column_list'] = ', '.join(columns)
     table_metadata['value_list'] = ', '.join(values)
 
@@ -740,6 +725,8 @@ def database_insert(config, table_metadata):
     sql_result = database_exec(config, sql)
 
     # Construct and return result.
+
+    request[id] = defaults.get(id)
 
     result = {
         'returnCode': 0,
@@ -802,7 +789,7 @@ def database_update_by_id(config, table_metadata):
 
     result = {
         'returnCode': 0,
-        'messageId': message(MESSAGE_INFO, 211),
+        'messageId': message(MESSAGE_INFO, 112),
         'message': message_kwargs(112, **table_metadata),
         'request': request,
     }
@@ -929,52 +916,52 @@ def handle_delete(config, request, table_metadata):
     table_metadata['id_value'] = request.get(table_metadata.get('id'))
     return database_delete_by_id(config, table_metadata)
 
-# ----- datasource ------------------------------------------------------------
+# ----- data-source -----------------------------------------------------------
 
 
-def handle_post_datasources(config, request):
+def handle_post_data_sources(config, request):
     table_metadata = get_table_metadata_cfg_dsrc()
     table_metadata['defaults']['DSRC_DESC'] = request.get('DSRC_CODE', "")
     return handle_post(config, request, table_metadata)
 
 
-def handle_put_datasources(config, request):
+def handle_put_data_sources(config, request):
     return handle_put(config, request, get_table_metadata_cfg_dsrc())
 
 
-def handle_get_datasources(config, request):
+def handle_get_data_sources(config, request):
     return handle_get(config, request, get_table_metadata_cfg_dsrc())
 
 
-def handle_get_datasource(config, request):
+def handle_get_data_source(config, request):
     return handle_get_single(config, request, get_table_metadata_cfg_dsrc())
 
 
-def handle_delete_datasources(config, request):
+def handle_delete_data_sources(config, request):
     return handle_delete(config, request, get_table_metadata_cfg_dsrc())
 
-# ----- entitytype ------------------------------------------------------------
+# ----- entity_type -----------------------------------------------------------
 
 
-def handle_post_entitytypes(config, request):
+def handle_post_entity_types(config, request):
     table_metadata = get_table_metadata_cfg_etype()
     table_metadata['defaults']['ETYPE_DESC'] = request.get('ETYPE_CODE', "")
     return handle_post(config, request, table_metadata)
 
 
-def handle_put_entitytypes(config, request):
+def handle_put_entity_types(config, request):
     return handle_put(config, request, get_table_metadata_cfg_etype())
 
 
-def handle_get_entitytypes(config, request):
+def handle_get_entity_types(config, request):
     return handle_get(config, request, get_table_metadata_cfg_etype())
 
 
-def handle_get_entitytype(config, request):
+def handle_get_entity_type(config, request):
     return handle_get_single(config, request, get_table_metadata_cfg_etype())
 
 
-def handle_delete_entitytypes(config, request):
+def handle_delete_entity_types(config, request):
     return handle_delete(config, request, get_table_metadata_cfg_etype())
 
 # -----------------------------------------------------------------------------
@@ -1021,22 +1008,22 @@ def http_post_generic():
     config = get_config()
     return route(config, flask_request.json)
 
-# ----- entitytypes -----------------------------------------------------------
+# ----- entity-type -----------------------------------------------------------
 
 
-@app.route("/entitytypes", methods=['POST'])
-def http_post_entitytype():
+@app.route("/entity-types", methods=['POST'])
+def http_post_entity_type():
     config = get_config()
     request = {
         "method": "post",
-        "object": "entitytypes",
+        "object": "entity_types",
         "request": flask_request.json
     }
     return route(config, request)
 
 
-@app.route("/entitytypes/<id>", methods=['PUT'])
-def http_put_entitytype(id):
+@app.route("/entity-types/<id>", methods=['PUT'])
+def http_put_entity_type(id):
     config = get_config()
     request = {
         "ETYPE_ID": id,
@@ -1044,28 +1031,28 @@ def http_put_entitytype(id):
     request.update(flask_request.json)
     request = {
         "method": "put",
-        "object": "entitytypes",
+        "object": "entity_types",
         "request": request
     }
     return route(config, request)
 
 
-@app.route("/entitytypes", methods=['GET'])
-def http_get_entitytypes():
+@app.route("/entity-types", methods=['GET'])
+def http_get_entity_types():
     config = get_config()
     request = {
         "method": "get",
-        "object": "entitytypes"
+        "object": "entity_types"
     }
     return route(config, request)
 
 
-@app.route("/entitytypes/<id>", methods=['GET'])
-def http_get_entitytype(id):
+@app.route("/entity-types/<id>", methods=['GET'])
+def http_get_entity_type(id):
     config = get_config()
     request = {
         "method": "get",
-        "object": "entitytype",
+        "object": "entity_type",
         "request": {
             "ETYPE_ID": id,
         }
@@ -1073,34 +1060,34 @@ def http_get_entitytype(id):
     return route(config, request)
 
 
-@app.route("/entitytypes/<id>", methods=['DELETE'])
-def http_delete_entitytypes(id):
+@app.route("/entity-types/<id>", methods=['DELETE'])
+def http_delete_entity_types(id):
     config = get_config()
     request = {
         "method": "delete",
-        "object": "entitytypes",
+        "object": "entity_types",
         "request": {
             "ETYPE_ID": id,
         }
     }
     return route(config, request)
 
-# ----- datasources -----------------------------------------------------------
+# ----- data-source -----------------------------------------------------------
 
 
-@app.route("/datasources", methods=['POST'])
-def http_post_datasource():
+@app.route("/data-sources", methods=['POST'])
+def http_post_data_source():
     config = get_config()
     request = {
         "method": "post",
-        "object": "datasources",
+        "object": "data_sources",
         "request": flask_request.json
     }
     return route(config, request)
 
 
-@app.route("/datasources/<id>", methods=['PUT'])
-def http_put_datasource(id):
+@app.route("/data-sources/<id>", methods=['PUT'])
+def http_put_data_source(id):
     config = get_config()
     request = {
         "DSRC_ID": id,
@@ -1108,28 +1095,28 @@ def http_put_datasource(id):
     request.update(flask_request.json)
     request = {
         "method": "put",
-        "object": "datasources",
+        "object": "data_sources",
         "request": request
     }
     return route(config, request)
 
 
-@app.route("/datasources", methods=['GET'])
-def http_get_datasources():
+@app.route("/data-sources", methods=['GET'])
+def http_get_data_sources():
     config = get_config()
     request = {
         "method": "get",
-        "object": "datasources"
+        "object": "data_sources"
     }
     return route(config, request)
 
 
-@app.route("/datasources/<id>", methods=['GET'])
-def http_get_datasource(id):
+@app.route("/data-sources/<id>", methods=['GET'])
+def http_get_data_source(id):
     config = get_config()
     request = {
         "method": "get",
-        "object": "datasource",
+        "object": "data_source",
         "request": {
             "DSRC_ID": id,
         }
@@ -1137,12 +1124,12 @@ def http_get_datasource(id):
     return route(config, request)
 
 
-@app.route("/datasources/<id>", methods=['DELETE'])
-def http_delete_datasources(id):
+@app.route("/data-sources/<id>", methods=['DELETE'])
+def http_delete_data_sources(id):
     config = get_config()
     request = {
         "method": "delete",
-        "object": "datasources",
+        "object": "data_sources",
         "request": {
             "DSRC_ID": id,
         }

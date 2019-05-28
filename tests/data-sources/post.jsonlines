@@ -1,0 +1,3 @@
+{"method": "post", "object": "data-sources", "request": {"DSRC_CODE": "new-data-source-1"}}
+{"method": "post", "object": "data-sources", "request": {"DSRC_CODE": "new-data-source-2"}}
+{"method": "post", "object": "data-sources", "request": {"DSRC_CODE": "new-data-source-3"}}

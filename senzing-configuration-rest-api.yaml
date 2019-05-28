@@ -1,0 +1,320 @@
+openapi: 3.0.1
+info:
+  title: Senzing configuration REST API
+  version: "1.0.0"
+  description: >-
+    This is the Senzing configuration REST API.
+    It describes the REST interface to configure Senzing.
+
+servers:
+  - url: http://localhost:{port}
+    variables:
+      port:
+        enum:
+          - '5000'
+        default: '5000'
+
+paths:
+  /data-sources:
+    get:
+      summary: Get a list of data sources.
+      tags:
+        - Data Sources
+      operationId: getDataSources
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SzTable_CFG_DSRC_list'
+    post:
+      summary: Create a new data source.
+      tags:
+        - Data Sources
+      operationId: postDataSources
+      requestBody:
+        description: A CFG_DSRC row
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SzTable_CFG_DSRC'
+      responses:
+        '201':
+          description: Successful insert
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/dataSourcesResponse'
+
+  /data-sources/{id}:
+    get:
+      summary: Get a data source by CFG_DSRC.DSRC_ID value.
+      tags:
+        - Data Sources
+      operationId: getDataSourceById
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      responses:
+        '200':
+          description: Success
+          content:
+            default:
+              schema:
+                $ref: '#/components/schemas/SzTable_CFG_DSRC'
+    put:
+      summary: Update a data source identified by CFG_DSRC.DSRC_ID value.
+      tags:
+        - Data Sources
+      operationId: putDataSourceById
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      requestBody:
+        description: A CFG_DSRC row
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SzTable_CFG_DSRC'
+      responses:
+        '200':
+          description: Successful update
+          content:
+            default:
+              schema:
+                $ref: '#/components/schemas/dataSourcesResponse'
+    delete:
+      summary: Delete a data source by CFG_DSRC.DSRC_ID value.
+      tags:
+        - Data Sources
+      operationId: deleteDataSourceById
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      responses:
+        '200':
+          description: Successful delete
+          content:
+            default:
+              schema:
+                $ref: '#/components/schemas/deleteResponse'
+
+  /entity-types:
+    get:
+      summary: Get a list of entity types.
+      tags:
+        - Entity Types
+      operationId: getEntityTypes
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SzTable_CFG_ETYPE_list'
+    post:
+      summary: Create a new entity type.
+      tags:
+        - Entity Types
+      operationId: postEntityTypes
+      requestBody:
+        description: A CFG_ETYPE row
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SzTable_CFG_ETYPE'
+      responses:
+        '201':
+          description: Successful insert
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/entityTypesResponse'
+
+  /entity-types/{id}:
+    get:
+      summary: Get an entity type by CFG_ETYPE.ETYPE_ID value.
+      tags:
+        - Entity Types
+      operationId: getEntityTypeById
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      responses:
+        '200':
+          description: Success
+          content:
+            default:
+              schema:
+                $ref: '#/components/schemas/SzTable_CFG_ETYPE'
+    put:
+      summary: Update an entity type identified by CFG_ETYPE.ETYPE_ID value.
+      tags:
+        - Entity Types
+      operationId: putEntityTypeById
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      requestBody:
+        description: A CFG_ETYPE row
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SzTable_CFG_ETYPE'
+      responses:
+        '200':
+          description: Successful update
+          content:
+            default:
+              schema:
+                $ref: '#/components/schemas/entityTypesResponse'
+    delete:
+      summary: Delete an entity type by CFG_ETYPE.ETYPE_ID value.
+      tags:
+        - Entity Types
+      operationId: deleteEntityTypeById
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      responses:
+        '200':
+          description: Successful delete
+          content:
+            default:
+              schema:
+                $ref: '#/components/schemas/deleteResponse'
+
+components:
+  parameters:
+    idParam:
+      in: path
+      name: id
+      required: true
+      description: >-
+        FIXME
+      schema:
+        type: integer
+  schemas:
+    baseResponse:
+      description: >-
+        FIXME
+      type: object
+      properties:
+        message:
+          type: string
+        messageId:
+          description: >-
+            A message identifier in the form 'senzing-5004nnnnX'. Where:
+            '5004' is the product id.
+            'nnnn' is the error identifier.
+            'X' is I=Informational, W=Warning, E=Error
+          type: string
+        returnCode:
+          description: >-
+            The return code for the operation.
+            Non-zero means a warning or error was issued.
+          type: integer
+          format: int64
+    deleteResponse:
+      description: >-
+        FIXME
+      allOf:
+        - $ref: '#/components/schemas/baseResponse'
+        - type: object
+          properties:
+            request:
+              description: >-
+                The request sent to the service.
+              type: object
+    dataSourcesResponse:
+      description: >-
+        FIXME
+      allOf:
+        - $ref: '#/components/schemas/baseResponse'
+        - type: object
+          properties:
+            request:
+              description: >-
+                The request sent to the service.
+              type: array
+              items:
+                $ref: '#/components/schemas/SzTable_CFG_DSRC'
+    entityTypesResponse:
+      description: >-
+        FIXME
+      allOf:
+        - $ref: '#/components/schemas/baseResponse'
+        - type: object
+          properties:
+            request:
+              description: >-
+                The request sent to the service.
+              type: array
+              items:
+                $ref: '#/components/schemas/SzTable_CFG_ETYPE'
+    SzTable_CFG_DSRC:
+      description: >-
+        FIXME
+      type: object
+      properties:
+        CONVERSATIONAL:
+          type: string
+          enum:
+            - No
+            - Yes
+        DSRC_CODE:
+          description: >-
+            A user-defined identifier of the data source.
+          type: string
+        DSRC_DESC:
+          description: >-
+            A user-definied description of the data source.
+          type: string
+        DSRC_ID:
+          description: >-
+            System-generated unique ID.
+          type: integer
+          format: int64
+          readOnly: true
+        DSRC_RELY:
+          type: integer
+          format: int64
+        RETENTION_LEVEL:
+          type: string
+          enum:
+            - Remember
+            - Forget
+    SzTable_CFG_DSRC_list:
+      type: array
+      items:
+        $ref: '#/components/schemas/SzTable_CFG_DSRC'
+    SzTable_CFG_ETYPE:
+      description: >-
+        FIXME
+      type: object
+      properties:
+        ECLASS_ID:
+          type: integer
+          format: int64
+        ETYPE_CODE:
+          description: >-
+            A user-definied identifier of the entity type.
+          type: string
+        ETYPE_DESC:
+          description: >-
+            A user-definied description of the entity type.
+          type: string
+        ETYPE_ID:
+          description: >-
+            System-generated unique ID.
+          type: integer
+          format: int64
+          readOnly: true
+    SzTable_CFG_ETYPE_list:
+      type: array
+      items:
+        $ref: '#/components/schemas/SzTable_CFG_ETYPE'
+tags:
+  - name: Data Sources
+    description: Modifies CFG_DSRC table
+  - name: Entity Types
+    description: Modifies CFG_ETYPE table
