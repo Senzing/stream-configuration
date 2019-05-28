@@ -23,13 +23,13 @@ paths:
       operationId: getDataSources
       responses:
         '200':
-          description: Successful response
+          description: Success
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SzTable_CFG_DSRC_list'
     post:
-      summary: Create a new data sources.
+      summary: Create a new data source.
       tags:
         - Data Sources
       operationId: postDataSources
@@ -42,7 +42,7 @@ paths:
               $ref: '#/components/schemas/SzTable_CFG_DSRC'
       responses:
         '201':
-          description: Created
+          description: Successful insert
           content:
             application/json:
               schema:
@@ -58,7 +58,7 @@ paths:
         - $ref: '#/components/parameters/idParam'
       responses:
         '200':
-          description: Successful delete.
+          description: Success
           content:
             default:
               schema:
@@ -79,7 +79,7 @@ paths:
               $ref: '#/components/schemas/SzTable_CFG_DSRC'
       responses:
         '200':
-          description: Successful update.
+          description: Successful update
           content:
             default:
               schema:
@@ -93,7 +93,91 @@ paths:
         - $ref: '#/components/parameters/idParam'
       responses:
         '200':
-          description: Successful delete.
+          description: Successful delete
+          content:
+            default:
+              schema:
+                $ref: '#/components/schemas/deleteResponse'
+
+  /entity-types:
+    get:
+      summary: Get a list of entity types.
+      tags:
+        - Entity Types
+      operationId: getEntityTypes
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SzTable_CFG_ETYPE_list'
+    post:
+      summary: Create a new entity type.
+      tags:
+        - Entity Types
+      operationId: postEntityTypes
+      requestBody:
+        description: A CFG_ETYPE row
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SzTable_CFG_ETYPE'
+      responses:
+        '201':
+          description: Successful insert
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/entityTypesResponse'
+
+  /entity-types/{id}:
+    get:
+      summary: Get an entity type by CFG_ETYPE.ETYPE_ID value.
+      tags:
+        - Entity Types
+      operationId: getEntityTypeById
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      responses:
+        '200':
+          description: Success
+          content:
+            default:
+              schema:
+                $ref: '#/components/schemas/SzTable_CFG_ETYPE'
+    put:
+      summary: Update an entity type identified by CFG_ETYPE.ETYPE_ID value.
+      tags:
+        - Entity Types
+      operationId: putEntityTypeById
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      requestBody:
+        description: A CFG_ETYPE row
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SzTable_CFG_ETYPE'
+      responses:
+        '200':
+          description: Successful update
+          content:
+            default:
+              schema:
+                $ref: '#/components/schemas/entityTypesResponse'
+    delete:
+      summary: Delete an entity type by CFG_ETYPE.ETYPE_ID value.
+      tags:
+        - Entity Types
+      operationId: deleteEntityTypeById
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      responses:
+        '200':
+          description: Successful delete
           content:
             default:
               schema:
@@ -154,6 +238,19 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/SzTable_CFG_DSRC'
+    entityTypesResponse:
+      description: >-
+        FIXME
+      allOf:
+        - $ref: '#/components/schemas/baseResponse'
+        - type: object
+          properties:
+            request:
+              description: >-
+                The request sent to the service.
+              type: array
+              items:
+                $ref: '#/components/schemas/SzTable_CFG_ETYPE'
     SzTable_CFG_DSRC:
       description: >-
         FIXME
@@ -190,7 +287,34 @@ components:
       type: array
       items:
         $ref: '#/components/schemas/SzTable_CFG_DSRC'
-
+    SzTable_CFG_ETYPE:
+      description: >-
+        FIXME
+      type: object
+      properties:
+        ECLASS_ID:
+          type: integer
+          format: int64
+        ETYPE_CODE:
+          description: >-
+            A user-definied identifier of the entity type.
+          type: string
+        ETYPE_DESC:
+          description: >-
+            A user-definied description of the entity type.
+          type: string
+        ETYPE_ID:
+          description: >-
+            System-generated unique ID.
+          type: integer
+          format: int64
+          readOnly: true
+    SzTable_CFG_ETYPE_list:
+      type: array
+      items:
+        $ref: '#/components/schemas/SzTable_CFG_ETYPE'
 tags:
   - name: Data Sources
     description: Modifies CFG_DSRC table
+  - name: Entity Types
+    description: Modifies CFG_ETYPE table

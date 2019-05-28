@@ -940,28 +940,28 @@ def handle_get_data_source(config, request):
 def handle_delete_data_sources(config, request):
     return handle_delete(config, request, get_table_metadata_cfg_dsrc())
 
-# ----- entitytype ------------------------------------------------------------
+# ----- entity_type -----------------------------------------------------------
 
 
-def handle_post_entitytypes(config, request):
+def handle_post_entity_types(config, request):
     table_metadata = get_table_metadata_cfg_etype()
     table_metadata['defaults']['ETYPE_DESC'] = request.get('ETYPE_CODE', "")
     return handle_post(config, request, table_metadata)
 
 
-def handle_put_entitytypes(config, request):
+def handle_put_entity_types(config, request):
     return handle_put(config, request, get_table_metadata_cfg_etype())
 
 
-def handle_get_entitytypes(config, request):
+def handle_get_entity_types(config, request):
     return handle_get(config, request, get_table_metadata_cfg_etype())
 
 
-def handle_get_entitytype(config, request):
+def handle_get_entity_type(config, request):
     return handle_get_single(config, request, get_table_metadata_cfg_etype())
 
 
-def handle_delete_entitytypes(config, request):
+def handle_delete_entity_types(config, request):
     return handle_delete(config, request, get_table_metadata_cfg_etype())
 
 # -----------------------------------------------------------------------------
@@ -1008,22 +1008,22 @@ def http_post_generic():
     config = get_config()
     return route(config, flask_request.json)
 
-# ----- entitytypes -----------------------------------------------------------
+# ----- entity-type -----------------------------------------------------------
 
 
-@app.route("/entitytypes", methods=['POST'])
-def http_post_entitytype():
+@app.route("/entity-types", methods=['POST'])
+def http_post_entity_type():
     config = get_config()
     request = {
         "method": "post",
-        "object": "entitytypes",
+        "object": "entity_types",
         "request": flask_request.json
     }
     return route(config, request)
 
 
-@app.route("/entitytypes/<id>", methods=['PUT'])
-def http_put_entitytype(id):
+@app.route("/entity-types/<id>", methods=['PUT'])
+def http_put_entity_type(id):
     config = get_config()
     request = {
         "ETYPE_ID": id,
@@ -1031,28 +1031,28 @@ def http_put_entitytype(id):
     request.update(flask_request.json)
     request = {
         "method": "put",
-        "object": "entitytypes",
+        "object": "entity_types",
         "request": request
     }
     return route(config, request)
 
 
-@app.route("/entitytypes", methods=['GET'])
-def http_get_entitytypes():
+@app.route("/entity-types", methods=['GET'])
+def http_get_entity_types():
     config = get_config()
     request = {
         "method": "get",
-        "object": "entitytypes"
+        "object": "entity_types"
     }
     return route(config, request)
 
 
-@app.route("/entitytypes/<id>", methods=['GET'])
-def http_get_entitytype(id):
+@app.route("/entity-types/<id>", methods=['GET'])
+def http_get_entity_type(id):
     config = get_config()
     request = {
         "method": "get",
-        "object": "entitytype",
+        "object": "entity_type",
         "request": {
             "ETYPE_ID": id,
         }
@@ -1060,12 +1060,12 @@ def http_get_entitytype(id):
     return route(config, request)
 
 
-@app.route("/entitytypes/<id>", methods=['DELETE'])
-def http_delete_entitytypes(id):
+@app.route("/entity-types/<id>", methods=['DELETE'])
+def http_delete_entity_types(id):
     config = get_config()
     request = {
         "method": "delete",
-        "object": "entitytypes",
+        "object": "entity_types",
         "request": {
             "ETYPE_ID": id,
         }
