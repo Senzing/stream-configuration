@@ -1,0 +1,7 @@
+{"method": "get",    "object": "data-sources", "request": {}}
+{"method": "post",   "object": "data-sources", "request": {"DSRC_ID": 1999, "DSRC_CODE": "data-source-1999"}}
+{"method": "get",    "object": "data-sources", "request": {}}
+{"method": "put",    "object": "data-sources", "request": {"DSRC_ID": 1999, "DSRC_DESC": "new-description for 1999"}}
+{"method": "get",    "object": "data-sources", "request": {}}
+{"method": "delete", "object": "data-sources", "request": {"DSRC_ID": 1999}}
+{"method": "get",    "object": "data-sources", "request": {}}

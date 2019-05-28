@@ -1,0 +1,21 @@
+openapi: 3.0.1
+info:
+  title: Senzing configuration REST API
+  version: "1.0.0"
+  description: >-
+    This is the Senzing coknfiguration REST API.
+    It describes the REST interface to configure Senzing.
+paths:
+  /data-sources/:
+    get:
+      tags:
+        - Data Sources
+      summary: Get a list of data sources.  (e.g. Rows from CFG_DSRC table)
+      operationId: getDataSources
+      responses:
+        '200':
+          description: Successful response
+
+tags:
+  - name: Data Sources
+    description: Data Sources

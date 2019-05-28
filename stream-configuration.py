@@ -47,7 +47,7 @@ app = Flask(__name__)
 __all__ = []
 __version__ = 1.0
 __date__ = '2019-05-23'
-__updated__ = '2019-05-27'
+__updated__ = '2019-05-28'
 
 SENZING_PRODUCT_ID = "5004"  # See https://github.com/Senzing/knowledge-base/blob/master/lists/senzing-product-ids.md
 log_format = '%(asctime)s %(message)s'
@@ -910,28 +910,28 @@ def handle_delete(config, request, table_metadata):
     table_metadata['id_value'] = request.get(table_metadata.get('id'))
     return database_delete_by_id(config, table_metadata)
 
-# ----- datasource ------------------------------------------------------------
+# ----- data-source -----------------------------------------------------------
 
 
-def handle_post_datasources(config, request):
+def handle_post_data_sources(config, request):
     table_metadata = get_table_metadata_cfg_dsrc()
     table_metadata['defaults']['DSRC_DESC'] = request.get('DSRC_CODE', "")
     return handle_post(config, request, table_metadata)
 
 
-def handle_put_datasources(config, request):
+def handle_put_data_sources(config, request):
     return handle_put(config, request, get_table_metadata_cfg_dsrc())
 
 
-def handle_get_datasources(config, request):
+def handle_get_data_sources(config, request):
     return handle_get(config, request, get_table_metadata_cfg_dsrc())
 
 
-def handle_get_datasource(config, request):
+def handle_get_data_source(config, request):
     return handle_get_single(config, request, get_table_metadata_cfg_dsrc())
 
 
-def handle_delete_datasources(config, request):
+def handle_delete_data_sources(config, request):
     return handle_delete(config, request, get_table_metadata_cfg_dsrc())
 
 # ----- entitytype ------------------------------------------------------------
@@ -1066,22 +1066,22 @@ def http_delete_entitytypes(id):
     }
     return route(config, request)
 
-# ----- datasources -----------------------------------------------------------
+# ----- data-source -----------------------------------------------------------
 
 
-@app.route("/datasources", methods=['POST'])
-def http_post_datasource():
+@app.route("/data-sources", methods=['POST'])
+def http_post_data_source():
     config = get_config()
     request = {
         "method": "post",
-        "object": "datasources",
+        "object": "data_sources",
         "request": flask_request.json
     }
     return route(config, request)
 
 
-@app.route("/datasources/<id>", methods=['PUT'])
-def http_put_datasource(id):
+@app.route("/data-sources/<id>", methods=['PUT'])
+def http_put_data_source(id):
     config = get_config()
     request = {
         "DSRC_ID": id,
@@ -1089,28 +1089,28 @@ def http_put_datasource(id):
     request.update(flask_request.json)
     request = {
         "method": "put",
-        "object": "datasources",
+        "object": "data_sources",
         "request": request
     }
     return route(config, request)
 
 
-@app.route("/datasources", methods=['GET'])
-def http_get_datasources():
+@app.route("/data-sources", methods=['GET'])
+def http_get_data_sources():
     config = get_config()
     request = {
         "method": "get",
-        "object": "datasources"
+        "object": "data_sources"
     }
     return route(config, request)
 
 
-@app.route("/datasources/<id>", methods=['GET'])
-def http_get_datasource(id):
+@app.route("/data-sources/<id>", methods=['GET'])
+def http_get_data_source(id):
     config = get_config()
     request = {
         "method": "get",
-        "object": "datasource",
+        "object": "data_source",
         "request": {
             "DSRC_ID": id,
         }
@@ -1118,12 +1118,12 @@ def http_get_datasource(id):
     return route(config, request)
 
 
-@app.route("/datasources/<id>", methods=['DELETE'])
-def http_delete_datasources(id):
+@app.route("/data-sources/<id>", methods=['DELETE'])
+def http_delete_data_sources(id):
     config = get_config()
     request = {
         "method": "delete",
-        "object": "datasources",
+        "object": "data_sources",
         "request": {
             "DSRC_ID": id,
         }
