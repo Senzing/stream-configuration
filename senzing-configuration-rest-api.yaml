@@ -3,10 +3,19 @@ info:
   title: Senzing configuration REST API
   version: "1.0.0"
   description: >-
-    This is the Senzing coknfiguration REST API.
+    This is the Senzing configuration REST API.
     It describes the REST interface to configure Senzing.
+
+servers:
+  - url: http://localhost:{port}
+    variables:
+      port:
+        enum:
+          - '5000'
+        default: '5000'
+
 paths:
-  /data-sources/:
+  /data-sources:
     get:
       tags:
         - Data Sources
@@ -15,6 +24,48 @@ paths:
       responses:
         '200':
           description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SzTable_CFG_DSRC_list'
+
+components:
+  schemas:
+    SzTable_CFG_DSRC:
+      description: >-
+        FIXME
+      type: object
+      properties:
+        CONVERSATIONAL:
+          type: string
+          enum:
+            - No
+            - Yes
+        DSRC_CODE:
+          description: >-
+            A user-defined identifier of the data source.
+          type: string
+        DSRC_DESC:
+          description: >-
+            A user-definied description of the data source.
+          type: string
+        DSRC_ID:
+          description: >-
+            System-generated unique ID.
+          type: integer
+          format: int64
+        DSRC_RELY:
+          type: integer
+          format: int64
+        RETENTION_LEVEL:
+          type: string
+          enum:
+            - Remember
+            - Forget
+    SzTable_CFG_DSRC_list:
+      type: array
+      items:
+        $ref: '#/components/schemas/SzTable_CFG_DSRC'
 
 tags:
   - name: Data Sources
