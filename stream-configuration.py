@@ -687,10 +687,10 @@ def database_insert(config, table_metadata):
     defaults = table_metadata.get('defaults', {})
     id = table_metadata.get('id')
 
-    # Verify input request.
+    # If ID is not a positive integer less than 1000, just remove it.
 
-    if id not in request:
-        return missing_key(id, request)
+    if (id in request) and (request.get(id, 0) < 1000):
+        request.pop(id)
 
     # Find next ID.
 
@@ -712,6 +712,10 @@ def database_insert(config, table_metadata):
         elif isinstance(value, six.integer_types):
             value = str(value)
         values.append(value)
+
+    # Update table_metadata.
+
+    table_metadata['id_value'] = defaults.get(id)
     table_metadata['column_list'] = ', '.join(columns)
     table_metadata['value_list'] = ', '.join(values)
 
@@ -721,6 +725,8 @@ def database_insert(config, table_metadata):
     sql_result = database_exec(config, sql)
 
     # Construct and return result.
+
+    request[id] = defaults.get(id)
 
     result = {
         'returnCode': 0,

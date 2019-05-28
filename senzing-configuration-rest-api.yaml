@@ -17,9 +17,9 @@ servers:
 paths:
   /data-sources:
     get:
+      summary: Get a list of data sources.
       tags:
         - Data Sources
-      summary: Get a list of data sources.  (e.g. Rows from CFG_DSRC table)
       operationId: getDataSources
       responses:
         '200':
@@ -28,9 +28,132 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SzTable_CFG_DSRC_list'
+    post:
+      summary: Create a new data sources.
+      tags:
+        - Data Sources
+      operationId: postDataSources
+      requestBody:
+        description: A CFG_DSRC row
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SzTable_CFG_DSRC'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/dataSourcesResponse'
+
+  /data-sources/{id}:
+    get:
+      summary: Get a data source by CFG_DSRC.DSRC_ID value.
+      tags:
+        - Data Sources
+      operationId: getDataSourceById
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      responses:
+        '200':
+          description: Successful delete.
+          content:
+            default:
+              schema:
+                $ref: '#/components/schemas/SzTable_CFG_DSRC'
+    put:
+      summary: Update a data source identified by CFG_DSRC.DSRC_ID value.
+      tags:
+        - Data Sources
+      operationId: putDataSourceById
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      requestBody:
+        description: A CFG_DSRC row
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SzTable_CFG_DSRC'
+      responses:
+        '200':
+          description: Successful update.
+          content:
+            default:
+              schema:
+                $ref: '#/components/schemas/dataSourcesResponse'
+    delete:
+      summary: Delete a data source by CFG_DSRC.DSRC_ID value.
+      tags:
+        - Data Sources
+      operationId: deleteDataSourceById
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      responses:
+        '200':
+          description: Successful delete.
+          content:
+            default:
+              schema:
+                $ref: '#/components/schemas/deleteResponse'
 
 components:
+  parameters:
+    idParam:
+      in: path
+      name: id
+      required: true
+      description: >-
+        FIXME
+      schema:
+        type: integer
   schemas:
+    baseResponse:
+      description: >-
+        FIXME
+      type: object
+      properties:
+        message:
+          type: string
+        messageId:
+          description: >-
+            A message identifier in the form 'senzing-5004nnnnX'. Where:
+            '5004' is the product id.
+            'nnnn' is the error identifier.
+            'X' is I=Informational, W=Warning, E=Error
+          type: string
+        returnCode:
+          description: >-
+            The return code for the operation.
+            Non-zero means a warning or error was issued.
+          type: integer
+          format: int64
+    deleteResponse:
+      description: >-
+        FIXME
+      allOf:
+        - $ref: '#/components/schemas/baseResponse'
+        - type: object
+          properties:
+            request:
+              description: >-
+                The request sent to the service.
+              type: object
+    dataSourcesResponse:
+      description: >-
+        FIXME
+      allOf:
+        - $ref: '#/components/schemas/baseResponse'
+        - type: object
+          properties:
+            request:
+              description: >-
+                The request sent to the service.
+              type: array
+              items:
+                $ref: '#/components/schemas/SzTable_CFG_DSRC'
     SzTable_CFG_DSRC:
       description: >-
         FIXME
@@ -54,6 +177,7 @@ components:
             System-generated unique ID.
           type: integer
           format: int64
+          readOnly: true
         DSRC_RELY:
           type: integer
           format: int64
@@ -69,4 +193,4 @@ components:
 
 tags:
   - name: Data Sources
-    description: Data Sources
+    description: Modifies CFG_DSRC table
