@@ -8,7 +8,7 @@ This docker formation shows how to modify Senzing configuration using the
 Viewing the Senzing configuration REST API OpenAPI specification:
 
 * In [Swagger editor](http://editor.swagger.io/?url=https://raw.githubusercontent.com/Senzing/stream-configuration/master/senzing-configuration-rest-api.yaml)
-* In [GitHub](../../senzing-rest-api.yaml)
+* In [GitHub](../../senzing-configuration-rest-api.yaml)
 
 This docker formation brings up the following docker containers:
 
