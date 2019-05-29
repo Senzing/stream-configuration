@@ -47,7 +47,7 @@ app = Flask(__name__)
 __all__ = []
 __version__ = 1.0
 __date__ = '2019-05-23'
-__updated__ = '2019-05-28'
+__updated__ = '2019-05-29'
 
 SENZING_PRODUCT_ID = "5004"  # See https://github.com/Senzing/knowledge-base/blob/master/lists/senzing-product-ids.md
 log_format = '%(asctime)s %(message)s'
@@ -129,6 +129,11 @@ configuration_locator = {
         "env": "SENZING_DIR",
         "cli": "senzing-dir"
     },
+    "sleep_time_in_seconds": {
+        "default": 0,
+        "env": "SENZING_SLEEP_TIME_IN_SECONDS",
+        "cli": "sleep-time-in-seconds"
+    },
     "subcommand": {
         "default": None,
         "env": "SENZING_SUBCOMMAND",
@@ -171,6 +176,9 @@ def get_parser():
     subparser_4.add_argument("--rabbitmq-password", dest="rabbitmq_password", metavar="SENZING_RABBITMQ_PASSWORD", help="RabbitMQ password. Default: bitnami")
     subparser_4.add_argument("--senzing-dir", dest="senzing_dir", metavar="SENZING_DIR", help="Location of Senzing. Default: /opt/senzing")
 
+    subparser_9 = subparsers.add_parser('sleep', help='Do nothing but sleep. For Docker testing.')
+    subparser_9.add_argument("--sleep-time-in-seconds", dest="sleep_time_in_seconds", metavar="SENZING_SLEEP_TIME_IN_SECONDS", help="Sleep time in seconds. DEFAULT: 0 (infinite)")
+
     subparser_10 = subparsers.add_parser('docker-acceptance-test', help='For Docker acceptance testing.')
 
     return parser
@@ -198,6 +206,8 @@ message_dictionary = {
     "110": "Successfully added {table_name}.{id}: {id_value}",
     "111": "Successfully deleted {table_name}.{id}: {id_value}",
     "112": "Successfully updated {table_name}.{id}: {id_value}",
+    "128": "Sleeping {0} seconds.",
+    "131": "Sleeping infinitely.",
     "197": "Version: {0}  Updated: {1}",
     "198": "For information on warnings and errors, see https://github.com/Senzing/stream-loader#errors",
     "199": "{0}",
@@ -1224,6 +1234,34 @@ def do_service(config):
     debug = config.get('debug')
 
     app.run(host=host, port=port, debug=debug)
+
+    # Epilog.
+
+    logging.info(exit_template(config))
+
+
+def do_sleep(config):
+    '''Sleep.  Used for debugging.'''
+
+    # Prolog.
+
+    logging.info(entry_template(config))
+
+    # Pull values from configuration.
+
+    sleep_time_in_seconds = config.get('sleep_time_in_seconds')
+
+    # Sleep
+
+    if sleep_time_in_seconds > 0:
+        logging.info(message_info(128, sleep_time_in_seconds))
+        time.sleep(sleep_time_in_seconds)
+
+    else:
+        sleep_time_in_seconds = 3600
+        while True:
+            logging.info(message_info(131))
+            time.sleep(sleep_time_in_seconds)
 
     # Epilog.
 
