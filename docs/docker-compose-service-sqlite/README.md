@@ -130,7 +130,7 @@ If you do not already have an `/opt/senzing` directory on your local system, vis
    Example:
 
     ```console
-    curl -X GET ${SENZING_CONFIG_URL}/datasources
+    curl -X GET ${SENZING_CONFIG_URL}/data-sources
     ```
 
 1. Add a new Senzing data source.
@@ -140,14 +140,14 @@ If you do not already have an `/opt/senzing` directory on your local system, vis
     curl -X POST \
       --header "Content-type: application/json" \
       --data '{"DSRC_ID":"'${DSRC_ID}'", "DSRC_CODE": "new-data-source"}' \
-      ${SENZING_CONFIG_URL}/datasources
+      ${SENZING_CONFIG_URL}/data-sources
     ```
 
 1. Get single data source.
    Example:
 
     ```console
-    curl -X GET ${SENZING_CONFIG_URL}/datasources/${DSRC_ID}
+    curl -X GET ${SENZING_CONFIG_URL}/data-sources/${DSRC_ID}
     ```
 
 1. Update Senzing data source.
@@ -157,14 +157,14 @@ If you do not already have an `/opt/senzing` directory on your local system, vis
     curl -X PUT \
       --header "Content-type: application/json" \
       --data '{"DSRC_DESC": "A new description"}' \
-       ${SENZING_CONFIG_URL}/datasources/${DSRC_ID}
+       ${SENZING_CONFIG_URL}/data-sources/${DSRC_ID}
     ```
 
 1. Delete Senzing data source.
    Example:
 
     ```console
-    curl -X DELETE ${SENZING_CONFIG_URL}/datasources/${DSRC_ID}
+    curl -X DELETE ${SENZING_CONFIG_URL}/data-sources/${DSRC_ID}
     ```
 
 ## Cleanup
