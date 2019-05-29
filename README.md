@@ -1,4 +1,4 @@
-# stream-configuration
+# spike-stream-configuration
 
 **WARNING**: This project is a "[spike](https://en.wikipedia.org/wiki/Spike_%28software_development%29)".
 
