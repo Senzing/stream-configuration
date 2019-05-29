@@ -17,25 +17,25 @@ To see all of the subcommands, run:
 ```console
 $ ./stream-configuration.py --help
 usage: stream-configuration.py [-h]
-                               {url,service,kafka,rabbitmq,docker-acceptance-test}
+                               {url,service,kafka,rabbitmq,sleep,docker-acceptance-test}
                                ...
 
 Configure Senzing metadata. For more information, see
 https://github.com/senzing/stream-configuration
 
 positional arguments:
-  {url,service,kafka,rabbitmq,docker-acceptance-test}
+  {url,service,kafka,rabbitmq,sleep,docker-acceptance-test}
                         Subcommands (SENZING_SUBCOMMAND):
     url                 Read JSON Lines from a URL addressable file.
     service             Receive HTTP requests.
     kafka               Read JSON Lines from Apache Kafka topic.
     rabbitmq            Read JSON Lines from RabbitMQ queue.
+    sleep               Do nothing but sleep. For Docker testing.
     docker-acceptance-test
                         For Docker acceptance testing.
 
 optional arguments:
   -h, --help            show this help message and exit
-
 ```
 
 To see the options for a subcommand, run commands like:

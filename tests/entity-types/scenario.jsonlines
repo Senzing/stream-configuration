@@ -1,0 +1,7 @@
+{"method": "get",    "object": "entity-types", "request": {}}
+{"method": "post",   "object": "entity-types", "request": {"ETYPE_ID": 1999, "ETYPE_CODE": "data-source-1999"}}
+{"method": "get",    "object": "entity-types", "request": {}}
+{"method": "put",    "object": "entity-types", "request": {"ETYPE_ID": 1999, "ETYPE_DESC": "new-description for 1999"}}
+{"method": "get",    "object": "entity-types", "request": {}}
+{"method": "delete", "object": "entity-types", "request": {"ETYPE_ID": 1999}}
+{"method": "get",    "object": "entity-types", "request": {}}

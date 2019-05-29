@@ -1,0 +1,1 @@
+{"method": "put", "object": "entity-types", "request": {"ETYPE_ID": 1999, "ETYPE_DESC": "new-description for 1999"}}
