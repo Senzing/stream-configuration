@@ -1,4 +1,14 @@
-# stream-configuration
+# spike-stream-configuration
+
+**WARNING**: This project is a "[spike](https://en.wikipedia.org/wiki/Spike_%28software_development%29)".
+
+It is meant to test an idea.
+
+It probably:
+
+1. Is incomplete.
+1. Doesn't work.
+1. Is a work in-progress and may not be intended for final product status.
 
 ## Overview
 
