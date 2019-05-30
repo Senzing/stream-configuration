@@ -16,7 +16,6 @@ import sys
 import time
 import confluent_kafka
 import pika
-from cryptography.hazmat.primitives.asymmetric.padding import PSS
 
 # Python 2 / 3 migration.
 
@@ -45,9 +44,9 @@ from flask import request as flask_request
 app = Flask(__name__)
 
 __all__ = []
-__version__ = 1.0
+__version__ = "1.0.0"  # See https://www.python.org/dev/peps/pep-0396/
 __date__ = '2019-05-23'
-__updated__ = '2019-05-29'
+__updated__ = '2019-05-30'
 
 SENZING_PRODUCT_ID = "5004"  # See https://github.com/Senzing/knowledge-base/blob/master/lists/senzing-product-ids.md
 log_format = '%(asctime)s %(message)s'
@@ -176,6 +175,8 @@ def get_parser():
     subparser_4.add_argument("--rabbitmq-password", dest="rabbitmq_password", metavar="SENZING_RABBITMQ_PASSWORD", help="RabbitMQ password. Default: bitnami")
     subparser_4.add_argument("--senzing-dir", dest="senzing_dir", metavar="SENZING_DIR", help="Location of Senzing. Default: /opt/senzing")
 
+    subparser_8 = subparsers.add_parser('version', help='Print the version of senzing-package.py.')
+
     subparser_9 = subparsers.add_parser('sleep', help='Do nothing but sleep. For Docker testing.')
     subparser_9.add_argument("--sleep-time-in-seconds", dest="sleep_time_in_seconds", metavar="SENZING_SLEEP_TIME_IN_SECONDS", help="Sleep time in seconds. DEFAULT: 0 (infinite)")
 
@@ -201,13 +202,14 @@ MESSAGE_DEBUG = 900
 
 message_dictionary = {
     "100": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}I",
-    "101": "Enter {0}",
-    "102": "Exit {0}",
+    "101": "Enter",
+    "102": "Exit",
+    "103": "Version: {0}  Updated: {1}",
+    "104": "Sleeping {0} seconds.",
+    "105": "Sleeping infinitely.",
     "110": "Successfully added {table_name}.{id}: {id_value}",
     "111": "Successfully deleted {table_name}.{id}: {id_value}",
     "112": "Successfully updated {table_name}.{id}: {id_value}",
-    "128": "Sleeping {0} seconds.",
-    "131": "Sleeping infinitely.",
     "197": "Version: {0}  Updated: {1}",
     "198": "For information on warnings and errors, see https://github.com/Senzing/stream-loader#errors",
     "199": "{0}",
@@ -252,7 +254,7 @@ def message_generic(generic_index, index, *args):
         "messageId": message(generic_index, index),
         "message":  message(index, *args),
     }
-    return json.dumps(message_dictionary)
+    return json.dumps(message_dictionary, sort_keys=True)
 
 
 def message_info(index, *args):
@@ -449,8 +451,12 @@ def validate_configuration(config):
         exit_error(499)
 
 # -----------------------------------------------------------------------------
-# Utility functions
+# Common utility functions
 # -----------------------------------------------------------------------------
+
+
+def bootstrap_signal_handler(signal, frame):
+    sys.exit(0)
 
 
 def create_signal_handler_function(config):
@@ -463,7 +469,7 @@ def create_signal_handler_function(config):
             "returnCode": 0,
             "messageId":  message(100, 102),
             "elapsedTime": stop_time - config.get('startTime', stop_time),
-            "status": "Exit via signal",
+            "message": "Exit via signal",
             "context": config,
         }
 
@@ -475,17 +481,13 @@ def create_signal_handler_function(config):
     return result_function
 
 
-def bootstrap_signal_handler(signal, frame):
-    sys.exit(0)
-
-
 def entry_template(config):
     '''Format of entry message.'''
     config['startTime'] = time.time()
     result = {
         "returnCode": 0,
         "messageId":  message(100, 101),
-        "status": "Entry",
+        "message": message(101),
         "context": config,
     }
 
@@ -502,7 +504,7 @@ def exit_template(config):
         "returnCode": 0,
         "messageId":  message(100, 102),
         "elapsedTime": stop_time - config.get('startTime', stop_time),
-        "status": "Exit",
+        "message": message(102),
         "context": config,
     }
 
@@ -520,28 +522,21 @@ def exit_error(index, *args):
 
 def exit_silently():
     '''Exit program.'''
-    sys.exit(1)
-
-# -----------------------------------------------------------------------------
-#
-# -----------------------------------------------------------------------------
-
-
-def common_prolog(config):
-
-    validate_configuration(config)
-
-    # Prolog.
-
-    logging.info(entry_template(config))
+    sys.exit(0)
 
 
 def get_config():
     return config
 
 # -----------------------------------------------------------------------------
-#
+# Utility functions
 # -----------------------------------------------------------------------------
+
+
+def common_prolog(config):
+    '''Common steps for most do_* functions.'''
+    validate_configuration(config)
+    logging.info(entry_template(config))
 
 
 def create_input_lines_generator_factory(config):
@@ -992,7 +987,7 @@ def route(config, message_dictionary):
     # Verify method.
 
     if method not in methods:
-        return json.dumps(bad_method(message_dictionary, method, methods))
+        return json.dumps(bad_method(message_dictionary, method, methods), sort_keys=True)
 
     # Create a function name.
 
@@ -1001,12 +996,12 @@ def route(config, message_dictionary):
     # Test to see if function exists in the code.
 
     if route_function_name not in globals():
-        return json.dumps(bad_function(message_dictionary, object))
+        return json.dumps(bad_function(message_dictionary, object), sort_keys=True)
 
     # Tricky code for calling function based on string.
 
     result = globals()[route_function_name](config, request)
-    return json.dumps(result)
+    return json.dumps(result, sort_keys=True)
 
 # -----------------------------------------------------------------------------
 # Flask @app.routes
@@ -1254,13 +1249,13 @@ def do_sleep(config):
     # Sleep
 
     if sleep_time_in_seconds > 0:
-        logging.info(message_info(128, sleep_time_in_seconds))
+        logging.info(message_info(104, sleep_time_in_seconds))
         time.sleep(sleep_time_in_seconds)
 
     else:
         sleep_time_in_seconds = 3600
         while True:
-            logging.info(message_info(131))
+            logging.info(message_info(105))
             time.sleep(sleep_time_in_seconds)
 
     # Epilog.
@@ -1334,10 +1329,10 @@ def do_url(config):
     logging.info(exit_template(config))
 
 
-def do_version(args):
+def do_version(config):
     '''Log version information.'''
 
-    logging.info(message_info(197, __version__, __updated__))
+    logging.info(message_info(103, __version__, __updated__))
 
 # -----------------------------------------------------------------------------
 # Main
