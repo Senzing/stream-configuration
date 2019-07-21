@@ -12,41 +12,37 @@ import logging
 import os
 import signal
 import six
+import string
 import sys
 import time
 import confluent_kafka
 import pika
 
-# Python 2 / 3 migration.
-
-try:
-    from urllib.request import urlopen
-except ImportError:
-    from urllib2 import urlopen
-
-try:
-    from urllib.parse import urlparse
-except ImportError:
-    from urlparse import urlparse
+from urllib.parse import urlparse, urlunparse, unquote
+from urllib.request import urlopen
 
 # Import Senzing libraries.
 
 try:
-    import G2Exception
+    from G2Config import G2Config
+    from G2ConfigMgr import G2ConfigMgr
     from G2Database import G2Database
+    from G2Engine import G2Engine
+    import G2Exception
 except ImportError:
     pass
 
 from flask import Flask
 from flask import json
 from flask import request as flask_request
+from flask import url_for
 
 app = Flask(__name__)
 
 __all__ = []
 __version__ = "1.0.0"  # See https://www.python.org/dev/peps/pep-0396/
 __date__ = '2019-05-23'
-__updated__ = '2019-07-19'
+__updated__ = '2019-07-21'
 
 SENZING_PRODUCT_ID = "5004"  # See https://github.com/Senzing/knowledge-base/blob/master/lists/senzing-product-ids.md
 log_format = '%(asctime)s %(message)s'
@@ -57,21 +53,31 @@ KILOBYTES = 1024
 MEGABYTES = 1024 * KILOBYTES
 GIGABYTES = 1024 * MEGABYTES
 
+# Lists from https://www.ietf.org/rfc/rfc1738.txt
+
+safe_character_list = ['$', '-', '_', '.', '+', '!', '*', '(', ')', ',', '"' ] + list(string.ascii_letters)
+unsafe_character_list = [ '"', '<', '>', '#', '%', '{', '}', '|', '\\', '^', '~', '[', ']', '`']
+reserved_character_list = [ ';', ',', '/', '?', ':', '@', '=', '&']
+
 # The "configuration_locator" describes where configuration variables are in:
 # 1) Command line options, 2) Environment variables, 3) Configuration files, 4) Default values
 
 config = {}
 configuration_locator = {
+    "config_path": {
+        "default": "/opt/senzing/g2/data",
+        "env": "SENZING_CONFIG_PATH",
+        "cli": "config-path"
+    },
     "debug": {
         "default": False,
         "env": "SENZING_DEBUG",
         "cli": "debug"
     },
-    "g2_database_url": {
-        "ini": {
-            "section": "g2",
-            "option": "G2Connection"
-        }
+    "g2_database_url_generic": {
+        "default": "sqlite3://na:na@/opt/senzing/g2/sqldb/G2C.db",
+        "env": "SENZING_DATABASE_URL",
+        "cli": "database-url"
     },
     "host": {
         "default": "0.0.0.0",
@@ -83,45 +89,10 @@ configuration_locator = {
         "env": "SENZING_INPUT_URL",
         "cli": "input-url"
     },
-    "kafka_bootstrap_server": {
-        "default": "localhost:9092",
-        "env": "SENZING_KAFKA_BOOTSTRAP_SERVER",
-        "cli": "kafka-bootstrap-server",
-    },
-    "kafka_group": {
-        "default": "senzing-config-kafka-group",
-        "env": "SENZING_KAFKA_GROUP",
-        "cli": "kafka-group"
-    },
-    "kafka_topic": {
-        "default": "senzing-config-kafka-topic",
-        "env": "SENZING_KAFKA_TOPIC",
-        "cli": "kafka-topic"
-    },
     "port": {
         "default": 5000,
         "env": "SENZING_PORT",
         "cli": "port"
-    },
-    "rabbitmq_host": {
-        "default": "localhost:5672",
-        "env": "SENZING_RABBITMQ_HOST",
-        "cli": "rabbitmq-host",
-    },
-    "rabbitmq_password": {
-        "default": "bitnami",
-        "env": "SENZING_RABBITMQ_PASSWORD",
-        "cli": "rabbitmq-password",
-    },
-    "rabbitmq_queue": {
-        "default": "senzing-rabbitmq-queue",
-        "env": "SENZING_RABBITMQ_QUEUE",
-        "cli": "rabbitmq-queue",
-    },
-    "rabbitmq_username": {
-        "default": "user",
-        "env": "SENZING_RABBITMQ_USERNAME",
-        "cli": "rabbitmq-username",
     },
     "senzing_dir": {
         "default": "/opt/senzing",
@@ -136,8 +107,18 @@ configuration_locator = {
     "subcommand": {
         "default": None,
         "env": "SENZING_SUBCOMMAND",
+    },
+    "support_path": {
+        "default": "/opt/senzing/g2/data",
+        "env": "SENZING_SUPPORT_PATH",
+        "cli": "support-path"
     }
 }
+
+# Enumerate keys in 'configuration_locator' that should not be printed to the log.
+
+keys_to_redact = [
+    ]
 
 # -----------------------------------------------------------------------------
 # Define argument parser
@@ -196,37 +177,49 @@ def get_parser():
 
 
 MESSAGE_INFO = 100
-MESSAGE_WARN = 200
-MESSAGE_ERROR = 400
+MESSAGE_WARN = 300
+MESSAGE_ERROR = 700
 MESSAGE_DEBUG = 900
 
 message_dictionary = {
     "100": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}I",
-    "101": "Enter",
-    "102": "Exit",
-    "103": "Version: {0}  Updated: {1}",
-    "104": "Sleeping {0} seconds.",
-    "105": "Sleeping infinitely.",
     "110": "Successfully added {table_name}.{id}: {id_value}",
     "111": "Successfully deleted {table_name}.{id}: {id_value}",
     "112": "Successfully updated {table_name}.{id}: {id_value}",
-    "197": "Version: {0}  Updated: {1}",
-    "198": "For information on warnings and errors, see https://github.com/Senzing/stream-loader#errors",
-    "199": "{0}",
-    "200": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}W",
     "202": "Non-fatal exception on Line {0}: {1} Error: {2}",
-    "400": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}E",
-    "401": "Cannot process request. No function for '{0}'.",
-    "402": "Cannot process request. Method '{0}' not in {1}",
-    "403": "Cannot process request. Key '{0}' not in request.",
-    "418": "Could not connect to RabbitMQ host at {1}. The host name maybe wrong, it may not be ready, or your credentials are incorrect. See the RabbitMQ log for more details. Error: {0}",
-    "406": "Cannot find G2Project.ini.",
-    "498": "Bad SENZING_SUBCOMMAND: {0}",
-    "499": "No processing done.",
+    "292": "Configuration change detected.  Old: {0} New: {1}",
+    "293": "For information on warnings and errors, see https://github.com/Senzing/stream-loader#errors",
+    "294": "Version: {0}  Updated: {1}",
+    "295": "Sleeping infinitely.",
+    "296": "Sleeping {0} seconds.",
+    "297": "Enter {0}",
+    "298": "Exit {0}",
+    "299": "{0}",
+    "300": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}W",
+    "499": "{0}",
     "500": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}E",
     "501": "Error: {0} for {1}",
     "502": "Could not connect to database. URL: {0} Error type: {1} Error: {2}",
-    "599": "Program terminated with error.",
+    "695": "Unknown database scheme '{0}' in database url '{1}'",
+    "696": "Bad SENZING_SUBCOMMAND: {0}.",
+    "697": "No processing done.",
+    "698": "Program terminated with error.",
+    "699": "{0}",
+    "700": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}E",
+    "886": "G2Engine.addRecord() bad return code: {0}; JSON: {1}",
+    "887": "G2Engine.addRecord() TranslateG2ModuleException: {0}; JSON: {1}",
+    "888": "G2Engine.addRecord() G2ModuleNotInitialized: {0}; JSON: {1}",
+    "889": "G2Engine.addRecord() G2ModuleGenericException: {0}; JSON: {1}",
+    "890": "G2Engine.addRecord() Exception: {0}; JSON: {1}",
+    "891": "Original and new database URLs do not match. Original URL: {0}; Reconstructed URL: {1}",
+    "892": "Could not initialize G2Product with '{0}'. Error: {1}",
+    "893": "Could not initialize G2Hasher with '{0}'. Error: {1}",
+    "894": "Could not initialize G2Diagnostic with '{0}'. Error: {1}",
+    "895": "Could not initialize G2Audit with '{0}'. Error: {1}",
+    "896": "Could not initialize G2ConfigMgr with '{0}'. Error: {1}",
+    "897": "Could not initialize G2Config with '{0}'. Error: {1}",
+    "898": "Could not initialize G2Engine with '{0}'. Error: {1}",
+    "899": "{0}",
     "900": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}D",
     "901": "Execute SQL: {0}",
     "999": "{0}",
@@ -239,22 +232,9 @@ def message(index, *args):
     return template.format(*args)
 
 
-def message_kwargs(index, **kwargs):
-    index_string = str(index)
-    template = message_dictionary.get(index_string, "No message for index {0}.".format(index_string))
-    return template.format(**kwargs)
-
-
 def message_generic(generic_index, index, *args):
-    returnCode = 0
-    if index >= MESSAGE_WARN:
-        returnCode = index
-    message_dictionary = {
-        "returnCode": returnCode,
-        "messageId": message(generic_index, index),
-        "message":  message(index, *args),
-    }
-    return json.dumps(message_dictionary, sort_keys=True)
+    index_string = str(index)
+    return "{0} {1}".format(message(generic_index, index), message(index, *args))
 
 
 def message_info(index, *args):
@@ -291,75 +271,148 @@ def get_exception():
     }
 
 # -----------------------------------------------------------------------------
+# Database URL parsing
+# -----------------------------------------------------------------------------
+
+
+def translate(map, astring):
+    new_string = str(astring)
+    for key, value in map.items():
+        new_string = new_string.replace(key, value)
+    return new_string
+
+
+def get_unsafe_characters(astring):
+    result = []
+    for unsafe_character in unsafe_character_list:
+        if unsafe_character in astring:
+            result.append(unsafe_character)
+    return result
+
+
+def get_safe_characters(astring):
+    result = []
+    for safe_character in safe_character_list:
+        if safe_character not in astring:
+            result.append(safe_character)
+    return result
+
+
+def parse_database_url(original_senzing_database_url):
+
+    result = {}
+
+    # Get the value of SENZING_DATABASE_URL environment variable.
+
+    senzing_database_url = original_senzing_database_url
+
+    # Create lists of safe and unsafe characters.
+
+    unsafe_characters = get_unsafe_characters(senzing_database_url)
+    safe_characters = get_safe_characters(senzing_database_url)
+
+    # Detect an error condition where there are not enough safe characters.
+
+    if len(unsafe_characters) > len(safe_characters):
+        logging.error(message_error(730, unsafe_characters, safe_characters))
+        return result
+
+    # Perform translation.
+    # This makes a map of safe character mapping to unsafe characters.
+    # "senzing_database_url" is modified to have only safe characters.
+
+    translation_map = {}
+    safe_characters_index = 0
+    for unsafe_character in unsafe_characters:
+        safe_character = safe_characters[safe_characters_index]
+        safe_characters_index += 1
+        translation_map[safe_character] = unsafe_character
+        senzing_database_url = senzing_database_url.replace(unsafe_character, safe_character)
+
+    # Parse "translated" URL.
+
+    parsed = urlparse(senzing_database_url)
+    schema = parsed.path.strip('/')
+
+    # Construct result.
+
+    result = {
+        'scheme': translate(translation_map, parsed.scheme),
+        'netloc': translate(translation_map, parsed.netloc),
+        'path': translate(translation_map, parsed.path),
+        'params': translate(translation_map, parsed.params),
+        'query': translate(translation_map, parsed.query),
+        'fragment': translate(translation_map, parsed.fragment),
+        'username': translate(translation_map, parsed.username),
+        'password': translate(translation_map, parsed.password),
+        'hostname': translate(translation_map, parsed.hostname),
+        'port': translate(translation_map, parsed.port),
+        'schema': translate(translation_map, schema),
+    }
+
+    # For safety, compare original URL with reconstructed URL.
+
+    url_parts = [
+        result.get('scheme'),
+        result.get('netloc'),
+        result.get('path'),
+        result.get('params'),
+        result.get('query'),
+        result.get('fragment'),
+    ]
+    test_senzing_database_url = urlunparse(url_parts)
+    if test_senzing_database_url != original_senzing_database_url:
+        logging.warning(message_warning(891, original_senzing_database_url, test_senzing_database_url))
+
+    # Return result.
+
+    return result
+
+# -----------------------------------------------------------------------------
 # Configuration
 # -----------------------------------------------------------------------------
 
 
-def get_g2project_ini_filename(args_dictionary):
-    ''' Find the G2Project.ini file in the filesystem.'''
+def get_g2_database_url_specific(generic_database_url):
+    result = ""
 
-    # Possible locations for G2Project.ini
+    parsed_database_url = parse_database_url(generic_database_url)
+    scheme = parsed_database_url.get('scheme')
 
-    filenames = [
-        "{0}/g2/python/G2Project.ini".format(args_dictionary.get('senzing_dir', None)),
-        "{0}/g2/python/G2Project.ini".format(os.getenv('SENZING_DIR', None)),
-        "{0}/G2Project.ini".format(os.getcwd()),
-        "{0}/G2Project.ini".format(os.path.dirname(os.path.realpath(__file__))),
-        "{0}/G2Project.ini".format(os.path.dirname(os.path.abspath(sys.argv[0]))),
-        "/etc/G2Project.ini",
-        "/opt/senzing/g2/python/G2Project.ini",
-    ]
+    if scheme in ['mysql']:
+        result = "{scheme}://{username}:{password}@{hostname}:{port}/?schema={schema}".format(**parsed_database_url)
+    elif scheme in ['postgresql']:
+        result = "{scheme}://{username}:{password}@{hostname}:{port}:{schema}/".format(**parsed_database_url)
+    elif scheme in ['db2']:
+        result = "{scheme}://{username}:{password}@{schema}".format(**parsed_database_url)
+    elif scheme in ['sqlite3']:
+        result = "{scheme}://{netloc}{path}".format(**parsed_database_url)
+    else:
+        logging.error(message_error(695, scheme, generic_database_url))
 
-    # Return first G2Project.ini found.
+    return result
 
-    for filename in filenames:
-        final_filename = os.path.abspath(filename)
-        if os.path.isfile(final_filename):
-            return final_filename
-
-    # If file not found, return error.
-
-    logging.warn(message_warn(406))
-    return None
 
 
 def get_configuration(args):
-    ''' Order of precedence: CLI, OS environment variables, INI file, default.'''
+    ''' Order of precedence: CLI, OS environment variables, INI file, default. '''
     result = {}
 
     # Copy default values into configuration dictionary.
 
-    for key, value in configuration_locator.items():
+    for key, value in list(configuration_locator.items()):
         result[key] = value.get('default', None)
 
     # "Prime the pump" with command line args. This will be done again as the last step.
 
-    for key, value in args.__dict__.items():
+    for key, value in list(args.__dict__.items()):
         new_key = key.format(subcommand.replace('-', '_'))
         if value:
             result[new_key] = value
 
-    # Copy INI values into configuration dictionary.
-
-    g2project_ini_filename = get_g2project_ini_filename(result)
-    if g2project_ini_filename:
-
-        result['g2project_ini'] = g2project_ini_filename
-
-        config_parser = configparser.RawConfigParser()
-        config_parser.read(g2project_ini_filename)
-
-        for key, value in configuration_locator.items():
-            keyword_args = value.get('ini', None)
-            if keyword_args:
-                try:
-                    result[key] = config_parser.get(**keyword_args)
-                except:
-                    pass
-
     # Copy OS environment variables into configuration dictionary.
 
-    for key, value in configuration_locator.items():
+    for key, value in list(configuration_locator.items()):
         os_env_var = value.get('env', None)
         if os_env_var:
             os_env_value = os.getenv(os_env_var, None)
@@ -368,15 +421,10 @@ def get_configuration(args):
 
     # Copy 'args' into configuration dictionary.
 
-    for key, value in args.__dict__.items():
+    for key, value in list(args.__dict__.items()):
         new_key = key.format(subcommand.replace('-', '_'))
         if value:
             result[new_key] = value
-
-    # Special case: Remove variable of less priority.
-
-    if result.get('project_filespec') and result.get('project_filename'):
-        result.pop('project_filename')  # Remove key
 
     # Special case: subcommand from command-line
 
@@ -402,17 +450,18 @@ def get_configuration(args):
         integer_string = result.get(integer)
         result[integer] = int(integer_string)
 
+    # Special case:  Tailored database URL
+
+    result['g2_database_url_specific'] = get_g2_database_url_specific(result.get("g2_database_url_generic"))
+
     return result
 
 
 def validate_configuration(config):
-    '''Check aggregate configuration from commandline options, environment variables, config files, and defaults.'''
+    ''' Check aggregate configuration from commandline options, environment variables, config files, and defaults. '''
 
     user_warning_messages = []
     user_error_messages = []
-
-#     if not config.get('g2_database_url'):
-#         user_error_messages.append(message_error(401))
 
     # Perform subcommand specific checking.
 
@@ -433,7 +482,7 @@ def validate_configuration(config):
     # Log warning messages.
 
     for user_warning_message in user_warning_messages:
-        logging.warn(user_warning_message)
+        logging.warning(user_warning_message)
 
     # Log error messages.
 
@@ -443,95 +492,85 @@ def validate_configuration(config):
     # Log where to go for help.
 
     if len(user_warning_messages) > 0 or len(user_error_messages) > 0:
-        logging.info(message_info(198))
+        logging.info(message_info(293))
 
     # If there are error messages, exit.
 
     if len(user_error_messages) > 0:
-        exit_error(499)
+        exit_error(597)
+
+
+def redact_configuration(config):
+    ''' Return a shallow copy of config with certain keys removed. '''
+    result = config.copy()
+    for key in keys_to_redact:
+        result.pop(key)
+    return result
 
 # -----------------------------------------------------------------------------
-# Common utility functions
+# Utility functions
 # -----------------------------------------------------------------------------
+
+
+def create_signal_handler_function(args):
+    ''' Tricky code.  Uses currying technique. Create a function for signal handling.
+        that knows about "args".
+    '''
+
+    def result_function(signal_number, frame):
+        logging.info(message_info(298, args))
+        sys.exit(0)
+
+    return result_function
 
 
 def bootstrap_signal_handler(signal, frame):
     sys.exit(0)
 
 
-def create_signal_handler_function(config):
-    '''Tricky code.  Uses currying technique. Create a function for signal handling.'''
-
-    def result_function(signal_number, frame):
-        stop_time = time.time()
-        config['stopTime'] = stop_time
-        result = {
-            "returnCode": 0,
-            "messageId":  message(100, 102),
-            "elapsedTime": stop_time - config.get('startTime', stop_time),
-            "message": "Exit via signal",
-            "context": config,
-        }
-
-        # FIXME: Redact sensitive info:  Example: database password.
-
-        logging.info(json.dumps(result, sort_keys=True))
-        sys.exit(0)
-
-    return result_function
-
-
 def entry_template(config):
-    '''Format of entry message.'''
-    config['startTime'] = time.time()
-    result = {
-        "returnCode": 0,
-        "messageId":  message(100, 101),
-        "message": message(101),
-        "context": config,
-    }
-
-    # FIXME: Redact sensitive info:  Example: database password.
-
-    return json.dumps(result, sort_keys=True)
+    ''' Format of entry message. '''
+    debug = config.get("debug", False)
+    config['start_time'] = time.time()
+    if debug:
+        final_config = config
+    else:
+        final_config = redact_configuration(config)
+    config_json = json.dumps(final_config, sort_keys=True)
+    return message_info(297, config_json)
 
 
 def exit_template(config):
-    '''Format of exit message.'''
+    ''' Format of exit message. '''
+    debug = config.get("debug", False)
     stop_time = time.time()
-    config['stopTime'] = time.time()
-    result = {
-        "returnCode": 0,
-        "messageId":  message(100, 102),
-        "elapsedTime": stop_time - config.get('startTime', stop_time),
-        "message": message(102),
-        "context": config,
-    }
-
-    # FIXME: Redact sensitive info:  Example: database password.
-
-    return json.dumps(result, sort_keys=True)
+    config['stop_time'] = stop_time
+    config['elapsed_time'] = stop_time - config.get('start_time', stop_time)
+    if debug:
+        final_config = config
+    else:
+        final_config = redact_configuration(config)
+    config_json = json.dumps(final_config, sort_keys=True)
+    return message_info(298, config_json)
 
 
 def exit_error(index, *args):
-    '''Log error message and exit program.'''
+    ''' Log error message and exit program. '''
     logging.error(message_error(index, *args))
-    logging.error(message_error(599))
+    logging.error(message_error(598))
     sys.exit(1)
 
 
 def exit_silently():
-    '''Exit program.'''
-    sys.exit(0)
-
-
-def get_config():
-    return config
+    ''' Exit program. '''
+    sys.exit(1)
 
 # -----------------------------------------------------------------------------
 # Utility functions
 # -----------------------------------------------------------------------------
 
+def get_config():
+    return config
 
 def common_prolog(config):
     '''Common steps for most do_* functions.'''
@@ -585,6 +624,83 @@ def create_input_lines_generator_factory(config):
     return result
 
 # -----------------------------------------------------------------------------
+# Senzing services.
+# -----------------------------------------------------------------------------
+
+
+def get_g2_configuration_dictionary(config):
+    result = {
+        "PIPELINE": {
+            "SUPPORTPATH": config.get("support_path"),
+            "CONFIGPATH": config.get("config_path")
+        },
+        "SQL": {
+            "CONNECTION": config.get("g2_database_url_specific"),
+        }
+    }
+    return result
+
+
+def get_g2_configuration_json(config):
+    return json.dumps(get_g2_configuration_dictionary(config))
+
+
+def get_g2_config(config, g2_config_name="loader-G2-config"):
+    '''Get the G2Config resource.'''
+    try:
+        g2_configuration_json = get_g2_configuration_json(config)
+        result = G2Config()
+        result.initV2(g2_config_name, g2_configuration_json, config.get('debug', False))
+    except G2Exception.G2ModuleException as err:
+        exit_error(897, g2_configuration_json, err)
+    return result
+
+
+def get_g2_configuration_manager(config, g2_configuration_manager_name="loader-G2-configuration-manager"):
+    '''Get the G2Config resource.'''
+    try:
+        g2_configuration_json = get_g2_configuration_json(config)
+        result = G2ConfigMgr()
+        result.initV2(g2_configuration_manager_name, g2_configuration_json, config.get('debug', False))
+    except G2Exception.G2ModuleException as err:
+        exit_error(896, g2_configuration_json, err)
+    return result
+
+
+def get_g2_diagnostic(config, g2_diagnostic_name="loader-G2-diagnostic"):
+    '''Get the G2Diagnostic resource.'''
+    try:
+        g2_configuration_json = get_g2_configuration_json(config)
+        result = G2Diagnostic()
+        result.initV2(g2_diagnostic_name, g2_configuration_json, config.get('debug', False))
+    except G2Exception.G2ModuleException as err:
+        exit_error(894, g2_configuration_json, err)
+    return result
+
+
+def get_g2_engine(config, g2_engine_name="loader-G2-engine"):
+    '''Get the G2Engine resource.'''
+    try:
+        g2_configuration_json = get_g2_configuration_json(config)
+        result = G2Engine()
+        result.initV2(g2_engine_name, g2_configuration_json, config.get('debug', False))
+        config['last_configuration_check'] = time.time()
+    except G2Exception.G2ModuleException as err:
+        exit_error(898, g2_configuration_json, err)
+    return result
+
+
+def get_g2_product(config, g2_product_name="loader-G2-product"):
+    '''Get the G2Product resource.'''
+    try:
+        g2_configuration_json = get_g2_configuration_json(config)
+        result = G2Product()
+        result.initV2(g2_product_name, g2_configuration_json, config.get('debug'))
+    except G2Exception.G2ModuleException as err:
+        exit_error(892, config.get('g2project_ini'), err)
+    return result
+
+# -----------------------------------------------------------------------------
 # Database routines.
 # -----------------------------------------------------------------------------
 
@@ -602,7 +718,7 @@ sql_dictionary = {
 def get_g2_database(config):
     '''Get the G2Engine resource.'''
 
-    g2_database_url = config.get('g2_database_url')
+    g2_database_url = config.get('g2_database_url_specific')
     try:
         result = G2Database(g2_database_url)
     except G2Exception.G2UnsupportedDatabaseType as err:
@@ -888,6 +1004,30 @@ def get_table_metadata_cfg_etype():
     }
     return post_process_table_metadata(result)
 
+
+def get_routes():
+    result = {
+        "links": {
+            "self": "/"
+        },
+        "data": {}
+    }
+    for rule in app.url_map.iter_rules():
+
+        methods = ', '.join(rule.methods)
+
+        options = {}
+        for arg in rule.arguments:
+            options[arg] = "[{0}]".format(arg)
+        url = url_for(rule.endpoint, **options)
+
+        result["data"][rule.endpoint] = {
+            "methods": methods,
+            "url": unquote(url)
+            }
+
+    return result
+
 # -----------------------------------------------------------------------------
 # handle_* functions
 # Input parameters:
@@ -921,13 +1061,52 @@ def handle_delete(config, request, table_metadata):
     table_metadata['id_value'] = request.get(table_metadata.get('id'))
     return database_delete_by_id(config, table_metadata)
 
+# ----- root ------------------------------------------------------------------
+
+
+def handle_get_root(config, request):
+    return get_routes()
+
 # ----- data-source -----------------------------------------------------------
 
 
 def handle_post_data_sources(config, request):
-    table_metadata = get_table_metadata_cfg_dsrc()
-    table_metadata['defaults']['DSRC_DESC'] = request.get('DSRC_CODE', "")
-    return handle_post(config, request, table_metadata)
+
+    # Get Senzing G2 resources
+
+    g2_engine = get_g2_engine(config)
+    g2_config = get_g2_config(config)
+    g2_configuration_manager = get_g2_configuration_manager(config)
+
+    config_handle = g2_config.create()
+
+    active_config_id = bytearray()
+    g2_engine.getActiveConfigID(active_config_id)
+
+    active_config_json = bytearray()
+
+    # FIXME:  Hack to work around Python API inconsistency.
+
+    active_config_id_int = int(active_config_id)
+
+    g2_configuration_manager.getConfig(active_config_id_int, active_config_json)
+
+    print("MJD: {0}".format(type(active_config_json)))
+
+    active_config_handle = g2_config.load(active_config_json.decode())
+    g2_config.addDataSource(config_handle, "BOB")
+
+    new_config_json = bytearray()
+    return_code = g2_config.save(config_handle, new_config_json)
+
+    new_configuration_comments = "Add Bob"
+    new_config_id  = bytearray()
+
+    g2_configuration_manager.addConfig(new_config_json.decode(), new_configuration_comments, new_config_id)
+
+
+#     return handle_post(config, request, table_metadata)
+    return {}
 
 
 def handle_put_data_sources(config, request):
@@ -935,7 +1114,26 @@ def handle_put_data_sources(config, request):
 
 
 def handle_get_data_sources(config, request):
-    return handle_get(config, request, get_table_metadata_cfg_dsrc())
+    g2_config = get_g2_config(config)
+    config_handle = g2_config.create()
+    datasources_bytearray = bytearray()
+    method = "g2_config.listDataSources"
+    parameters = "{0}, {1}".format(config_handle, datasources_bytearray.decode())
+    try:
+        return_code = g2_config.listDataSources(config_handle, datasources_bytearray)
+    except G2Exception.TranslateG2ModuleException as err:
+        logging.error(message_error(750, err, method, parameters))
+    except G2Exception.G2ModuleNotInitialized as err:
+        logging.error(message_error(751, err, method, parameters))
+    except Exception as err:
+        logging.error(message_error(752, err, method, parameters))
+    except:
+        logging.error(message_error(753, method, parameters))
+    if return_code != 0:
+        exit_error(754, return_code, method, parameters)
+
+    result = json.loads(datasources_bytearray.decode())
+    return result
 
 
 def handle_get_data_source(config, request):
@@ -1141,6 +1339,18 @@ def http_delete_data_sources(id):
     }
     return route(config, request)
 
+
+@app.route("/", methods=['GET'])
+def http_get_root():
+    config = get_config()
+    request = {
+        "method": "get",
+        "object": "root",
+        "request": {
+        }
+    }
+    return route(config, request)
+
 # -----------------------------------------------------------------------------
 # RabbitMQ helpers
 # -----------------------------------------------------------------------------
@@ -1161,67 +1371,29 @@ def create_on_callback_function(config):
 # -----------------------------------------------------------------------------
 
 
-def do_docker_acceptance_test(config):
-    '''Mock command for docker acceptance testing.'''
+def do_docker_acceptance_test(args):
+    ''' For use with Docker acceptance testing. '''
+
+    # Get context from CLI, environment variables, and ini files.
+
+    config = get_configuration(args)
+
+    # Prolog.
+
     logging.info(entry_template(config))
-    logging.info(exit_template(config))
-
-
-def do_kafka(config):
-    '''Read from Kafka.'''
-
-    # Perform common initialization tasks.
-
-    common_prolog(config)
-
-    # Create Kafka client.
-
-    consumer_configuration = {
-        'bootstrap.servers': config.get('kafka_bootstrap_server'),
-        'group.id': config.get("kafka_group"),
-        'enable.auto.commit': False,
-        'auto.offset.reset': 'earliest'
-        }
-    consumer = confluent_kafka.Consumer(consumer_configuration)
-    consumer.subscribe([config.get("kafka_topic")])
-
-    # In a loop, get messages from Kafka.
-
-    while True:
-
-        # Get message from Kafka queue.
-        # Timeout quickly to allow other co-routines to process.
-
-        kafka_message = consumer.poll(1.0)
-
-        # Handle non-standard Kafka output.
-
-        if kafka_message is None:
-            continue
-        if kafka_message.error():
-            if kafka_message.error().code() == confluent_kafka.KafkaError._PARTITION_EOF:
-                continue
-            else:
-                logging.error(message_error(508, kafka_message.error()))
-                continue
-
-        # Construct and verify Kafka message.
-
-        kafka_message_string = kafka_message.value().strip()
-        if not kafka_message_string:
-            continue
-
-        input_dictionary = json.loads(kafka_message_string)
-        response = route(config, input_dictionary)
-        logging.info(response)
 
     # Epilog.
 
     logging.info(exit_template(config))
 
 
-def do_service(config):
+
+def do_service(args):
     '''Read from URL-addressable file.'''
+
+    # Get context from CLI, environment variables, and ini files.
+
+    config = get_configuration(args)
 
     common_prolog(config)
     host = config.get('host')
@@ -1235,8 +1407,12 @@ def do_service(config):
     logging.info(exit_template(config))
 
 
-def do_sleep(config):
-    '''Sleep.  Used for debugging.'''
+def do_sleep(args):
+    ''' Sleep.  Used for debugging. '''
+
+    # Get context from CLI, environment variables, and ini files.
+
+    config = get_configuration(args)
 
     # Prolog.
 
@@ -1249,13 +1425,13 @@ def do_sleep(config):
     # Sleep
 
     if sleep_time_in_seconds > 0:
-        logging.info(message_info(104, sleep_time_in_seconds))
+        logging.info(message_info(296, sleep_time_in_seconds))
         time.sleep(sleep_time_in_seconds)
 
     else:
         sleep_time_in_seconds = 3600
         while True:
-            logging.info(message_info(105))
+            logging.info(message_info(295))
             time.sleep(sleep_time_in_seconds)
 
     # Epilog.
@@ -1263,76 +1439,10 @@ def do_sleep(config):
     logging.info(exit_template(config))
 
 
-def do_rabbitmq(config):
-    '''Read from Kafka.'''
+def do_version(args):
+    ''' Log version information. '''
 
-    # Perform common initialization tasks.
-
-    common_prolog(config)
-
-    # Get config parameters.
-
-    rabbitmq_queue = config.get("rabbitmq_queue")
-    rabbitmq_username = config.get("rabbitmq_username")
-    rabbitmq_password = config.get("rabbitmq_password")
-    rabbitmq_host = config.get("rabbitmq_host")
-
-    # Create callback function.
-
-    on_callback = create_on_callback_function(config)
-
-    # Connect to RabbitMQ queue.
-
-#     try:
-    credentials = pika.PlainCredentials(rabbitmq_username, rabbitmq_password)
-    connection = pika.BlockingConnection(pika.ConnectionParameters(host=rabbitmq_host, credentials=credentials))
-    channel = connection.channel()
-    channel.queue_declare(queue=rabbitmq_queue)
-    channel.basic_qos(prefetch_count=10)
-    channel.basic_consume(queue=rabbitmq_queue, on_message_callback=on_callback)
-#     except pika.exceptions.AMQPConnectionError as err:
-#         exit_error(418, err, rabbitmq_host)
-#     except BaseException as err:
-#         exit_error(417, err)
-
-    # Start consuming.
-
-    try:
-        channel.start_consuming()
-    except pika.exceptions.ChannelClosed:
-        logging.info(message_info(130, threading.current_thread().name))
-
-    # Epilog.
-
-    logging.info(exit_template(config))
-
-
-def do_url(config):
-    '''Read from URL-addressable file.'''
-
-    common_prolog(config)
-
-    # Pull values from configuration.
-
-    input_lines = create_input_lines_generator_factory(config)
-
-    # Iterate through file.
-
-    for input_line in input_lines():
-        if input_line:
-            input_dictionary = json.loads(input_line)
-            response = route(config, input_dictionary)
-            logging.info(response)
-
-    # Epilog.
-
-    logging.info(exit_template(config))
-
-
-def do_version(config):
-    '''Log version information.'''
-
-    logging.info(message_info(103, __version__, __updated__))
+    logging.info(message_info(294, __version__, __updated__))
 
 # -----------------------------------------------------------------------------
 # Main
@@ -1379,15 +1489,15 @@ if __name__ == "__main__":
             do_sleep(args)
         exit_silently()
 
-    # Get configuration
-
-    config = get_configuration(args)
-
     # Catch interrupts. Tricky code: Uses currying.
 
-    signal_handler = create_signal_handler_function(config)
+    signal_handler = create_signal_handler_function(args)
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
+
+    # Set global config for use by Flask.
+
+    config = get_configuration(args)
 
     # Transform subcommand from CLI parameter to function name string.
 
@@ -1396,10 +1506,10 @@ if __name__ == "__main__":
     # Test to see if function exists in the code.
 
     if subcommand_function_name not in globals():
-        logging.warn(message_warn(498, subcommand))
+        logging.warning(message_warning(596, subcommand))
         parser.print_help()
         exit_silently()
 
     # Tricky code for calling function based on string.
 
-    globals()[subcommand_function_name](config)
+    globals()[subcommand_function_name](args)
