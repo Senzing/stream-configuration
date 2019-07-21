@@ -24,7 +24,8 @@ RUN pip3 install \
     Flask \
     flask_api \
     psutil \
-    pika
+    pika \
+    six
 
 # Copy files from repository.
 
