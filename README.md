@@ -1,18 +1,14 @@
 # spike-stream-configuration
 
-**WARNING**: This project is a "[spike](https://en.wikipedia.org/wiki/Spike_%28software_development%29)".
+## :construction: Under construction
 
-It is meant to test an idea.
+This repository is work in anticipation of a HTTP service for changing Senzing G2 configuration.
 
-It probably:
-
-1. Is incomplete.
-1. Doesn't work.
-1. Is a work in-progress and may not be intended for final product status.
+It is not recommended for general use.
 
 ## Overview
 
-The [stream-configuration.py](stream-configuration.py) python script is used to perform Senzing configuration via input from:
+The goal of the [stream-configuration.py](stream-configuration.py) python script is to perform Senzing configuration via input from:
 
 1. Local or URL-addressable file
 1. RESTful micro-service
@@ -38,8 +34,6 @@ positional arguments:
                         Subcommands (SENZING_SUBCOMMAND):
     url                 Read JSON Lines from a URL addressable file.
     service             Receive HTTP requests.
-    kafka               Read JSON Lines from Apache Kafka topic.
-    rabbitmq            Read JSON Lines from RabbitMQ queue.
     sleep               Do nothing but sleep. For Docker testing.
     docker-acceptance-test
                         For Docker acceptance testing.
@@ -89,33 +83,12 @@ To see the options for a subcommand, run commands like:
 * **SENZING_INPUT_URL** -
   URL of source file.
   No default.
-* **SENZING_KAFKA_BOOTSTRAP_SERVER** -
-  Hostname and port of Kafka server.
-  Default: "localhost:9092"
-* **SENZING_KAFKA_GROUP** -
-  Kafka group.
-  Default: "senzing-kafka-group"
-* **SENZING_KAFKA_TOPIC** -
-  Kafka topic.
-  Default: "senzing-kafka-topic"
 * **SENZING_LOG_LEVEL** -
   Level of logging. {notset, debug, info, warning, error, critical}.
   Default: info
 * **SENZING_PORT** -
   IP address for web micro-service.
   Default: 5000
-* **SENZING_RABBITMQ_HOST** -
-  Host name of the RabbitMQ exchange.
-  Default: "localhost:5672"
-* **SENZING_RABBITMQ_PASSWORD** -
-  The password for the RabbitMQ queue.
-  Default: "bitnami"
-* **SENZING_RABBITMQ_QUEUE** -
-  Name of the RabbitMQ queue used for communication.
-  Default: "senzing-rabbitmq-queue"
-* **SENZING_RABBITMQ_USERNAME** -
-  The username for the RabbitMQ queue.
-  Default: "user"
 * **SENZING_SLEEP_TIME** -
   Amount of time to sleep, in seconds for `stream-loader.py sleep` subcommand.
   Default: 600.

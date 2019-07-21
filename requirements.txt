@@ -1,5 +1,6 @@
 configparser
 confluent-kafka
 Flask
+flask_api
 psutil
 pika

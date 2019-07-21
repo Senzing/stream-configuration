@@ -18,10 +18,11 @@ RUN apt-get update \
 
 # Install packages via PIP.
 
-RUN pip install \
+RUN pip3 install \
     configparser \
     confluent-kafka \
     Flask \
+    flask_api \
     psutil \
     pika
 

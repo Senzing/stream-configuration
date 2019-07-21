@@ -32,10 +32,9 @@ try:
 except ImportError:
     pass
 
-from flask import Flask
-from flask import json
+from flask import Flask, json, Response, url_for
 from flask import request as flask_request
-from flask import url_for
+from flask_api import status
 
 app = Flask(__name__)
 
@@ -118,7 +117,17 @@ configuration_locator = {
 # Enumerate keys in 'configuration_locator' that should not be printed to the log.
 
 keys_to_redact = [
+    "g2_database_url_generic",
+    "g2_database_url_specific",
     ]
+
+# Global cached objects
+
+g2_config_singleton = None
+g2_configuration_manager_singleton = None
+g2_diagnostic_singleton = None
+g2_engine_singleton = None
+g2_product_singleton = None
 
 # -----------------------------------------------------------------------------
 # Define argument parser
@@ -130,37 +139,19 @@ def get_parser():
     parser = argparse.ArgumentParser(prog="stream-configuration.py", description="Configure Senzing metadata. For more information, see https://github.com/senzing/stream-configuration")
     subparsers = parser.add_subparsers(dest='subcommand', help='Subcommands (SENZING_SUBCOMMAND):')
 
-    subparser_1 = subparsers.add_parser('url', help='Read JSON Lines from a URL addressable file.')
+    subparser_1 = subparsers.add_parser('service', help='Receive HTTP requests.')
+    subparser_1.add_argument("--config-path", dest="config_path", metavar="SENZING_CONFIG_PATH", help="Location of Senzing's configuration template. Default: /opt/senzing/g2/data")
+    subparser_1.add_argument("--database-url", dest="g2_database_url_generic", metavar="SENZING_DATABASE_URL", help="Information for connecting to database.")
     subparser_1.add_argument("--debug", dest="debug", action="store_true", help="Enable debugging. (SENZING_DEBUG) Default: False")
-    subparser_1.add_argument("--input-url", dest="input_url", metavar="SENZING_INPUT_URL", help="URL to file of JSON lines.")
+    subparser_1.add_argument("--host", dest="host", metavar="SENZING_HOST", help="Host to listen on. Default: 0.0.0.0")
+    subparser_1.add_argument("--port", dest="port", metavar="SENZING_PORT", help="Port to listen on. Default: 8080")
     subparser_1.add_argument("--senzing-dir", dest="senzing_dir", metavar="SENZING_DIR", help="Location of Senzing. Default: /opt/senzing")
+    subparser_1.add_argument("--support-path", dest="support_path", metavar="SENZING_SUPPORT_PATH", help="Location of Senzing's support. Default: /opt/senzing/g2/data")
 
-    subparser_2 = subparsers.add_parser('service', help='Receive HTTP requests.')
-    subparser_2.add_argument("--debug", dest="debug", action="store_true", help="Enable debugging. (SENZING_DEBUG) Default: False")
-    subparser_2.add_argument("--host", dest="host", metavar="SENZING_HOST", help="Host to listen on. Default: 0.0.0.0")
-    subparser_2.add_argument("--port", dest="port", metavar="SENZING_PORT", help="Port to listen on. Default: 8080")
-    subparser_2.add_argument("--senzing-dir", dest="senzing_dir", metavar="SENZING_DIR", help="Location of Senzing. Default: /opt/senzing")
+    subparser_8 = subparsers.add_parser('sleep', help='Do nothing but sleep. For Docker testing.')
+    subparser_8.add_argument("--sleep-time-in-seconds", dest="sleep_time_in_seconds", metavar="SENZING_SLEEP_TIME_IN_SECONDS", help="Sleep time in seconds. DEFAULT: 0 (infinite)")
 
-    subparser_3 = subparsers.add_parser('kafka', help='Read JSON Lines from Apache Kafka topic.')
-    subparser_3.add_argument("--debug", dest="debug", action="store_true", help="Enable debugging. (SENZING_DEBUG) Default: False")
-    subparser_3.add_argument("--kafka-bootstrap-server", dest="kafka_bootstrap_server", metavar="SENZING_KAFKA_BOOTSTRAP_SERVER", help="Kafka bootstrap server. Default: localhost:9092")
-    subparser_3.add_argument("--kafka-group", dest="kafka_group", metavar="SENZING_KAFKA_GROUP", help="Kafka group. Default: senzing-config-kafka-group")
-    subparser_3.add_argument("--kafka-topic", dest="kafka_topic", metavar="SENZING_KAFKA_TOPIC", help="Kafka topic. Default: senzing-config-kafka-topic")
-    subparser_3.add_argument("--senzing-dir", dest="senzing_dir", metavar="SENZING_DIR", help="Location of Senzing. Default: /opt/senzing")
-
-    subparser_4 = subparsers.add_parser('rabbitmq', help='Read JSON Lines from RabbitMQ queue.')
-    subparser_4.add_argument("--debug", dest="debug", action="store_true", help="Enable debugging. (SENZING_DEBUG) Default: False")
-    subparser_4.add_argument("--rabbitmq-host", dest="rabbitmq_host", metavar="SENZING_rabbitmq_host", help="RabbitMQ host. Default: localhost:5672")
-    subparser_4.add_argument("--rabbitmq-queue", dest="rabbitmq_queue", metavar="SENZING_RABBITMQ_QUEUE", help="RabbitMQ queue. Default: senzing-rabbitmq-queue")
-    subparser_4.add_argument("--rabbitmq-username", dest="rabbitmq_username", metavar="SENZING_RABBITMQ_USERNAME", help="RabbitMQ username. Default: user")
-    subparser_4.add_argument("--rabbitmq-password", dest="rabbitmq_password", metavar="SENZING_RABBITMQ_PASSWORD", help="RabbitMQ password. Default: bitnami")
-    subparser_4.add_argument("--senzing-dir", dest="senzing_dir", metavar="SENZING_DIR", help="Location of Senzing. Default: /opt/senzing")
-
-    subparser_8 = subparsers.add_parser('version', help='Print the version of senzing-package.py.')
-
-    subparser_9 = subparsers.add_parser('sleep', help='Do nothing but sleep. For Docker testing.')
-    subparser_9.add_argument("--sleep-time-in-seconds", dest="sleep_time_in_seconds", metavar="SENZING_SLEEP_TIME_IN_SECONDS", help="Sleep time in seconds. DEFAULT: 0 (infinite)")
-
+    subparser_9 = subparsers.add_parser('version', help='Print version of stream-configuration.py.')
     subparser_10 = subparsers.add_parser('docker-acceptance-test', help='For Docker acceptance testing.')
 
     return parser
@@ -196,6 +187,9 @@ message_dictionary = {
     "298": "Exit {0}",
     "299": "{0}",
     "300": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}W",
+    "301": "Cannot process request. No function for '{0}'.",
+    "302": "Cannot process request. Method '{0}' not in {1}",
+    "303": "Cannot process request. Key '{0}' not in request.",
     "499": "{0}",
     "500": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}E",
     "501": "Error: {0} for {1}",
@@ -393,7 +387,6 @@ def get_g2_database_url_specific(generic_database_url):
     return result
 
 
-
 def get_configuration(args):
     ''' Order of precedence: CLI, OS environment variables, INI file, default. '''
     result = {}
@@ -467,16 +460,7 @@ def validate_configuration(config):
 
     subcommand = config.get('subcommand')
 
-    if subcommand in ['kafka', 'stdin', 'url']:
-        pass
-
-    if subcommand in ['stdin', 'url']:
-        pass
-
-    if subcommand in ['stdin']:
-        pass
-
-    if subcommand in ['kafka']:
+    if subcommand in ['service']:
         pass
 
     # Log warning messages.
@@ -557,7 +541,7 @@ def exit_template(config):
 def exit_error(index, *args):
     ''' Log error message and exit program. '''
     logging.error(message_error(index, *args))
-    logging.error(message_error(598))
+    logging.error(message_error(698))
     sys.exit(1)
 
 
@@ -569,59 +553,15 @@ def exit_silently():
 # Utility functions
 # -----------------------------------------------------------------------------
 
+
 def get_config():
     return config
+
 
 def common_prolog(config):
     '''Common steps for most do_* functions.'''
     validate_configuration(config)
     logging.info(entry_template(config))
-
-
-def create_input_lines_generator_factory(config):
-    '''Choose which input_lines_from_* function should be used.'''
-
-    def input_lines_from_stdin():
-        '''A generator for reading lines from STDIN.'''
-
-        # Note: The alternative, 'for line in sys.stdin:',  suffers from a 4K buffering issue.
-
-        reading = True
-        while reading:
-            line = sys.stdin.readline()
-            if line:
-                yield line.strip()
-            else:
-                reading = False  # FIXME: Not sure if this is the best method of exiting.
-
-    def input_lines_from_file():
-        '''A generator for reading lines from a local file.'''
-        with open(parsed_file_name.path, 'r') as lines:
-            for line in lines:
-                yield line.strip()
-
-    def input_lines_from_url():
-        '''A generator for reading lined from a URL-addressable file.'''
-        lines = urlopen(input_url)
-        for line in lines:
-            yield line.strip()
-
-    result = None
-    input_url = config.get('input_url')
-
-    # If no file, input comes from STDIN.
-
-    if not input_url:
-        return input_lines_from_stdin
-
-    # Return a function based on URI protocol.
-
-    parsed_file_name = urlparse(input_url)
-    if parsed_file_name.scheme in ['http', 'https']:
-        result = input_lines_from_url
-    elif parsed_file_name.scheme in ['file', '']:
-        result = input_lines_from_file
-    return result
 
 # -----------------------------------------------------------------------------
 # Senzing services.
@@ -647,39 +587,67 @@ def get_g2_configuration_json(config):
 
 def get_g2_config(config, g2_config_name="loader-G2-config"):
     '''Get the G2Config resource.'''
+    global g2_config_singleton
+
+    if g2_config_singleton:
+        return g2_config_singleton
+
+    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+
     try:
         g2_configuration_json = get_g2_configuration_json(config)
         result = G2Config()
         result.initV2(g2_config_name, g2_configuration_json, config.get('debug', False))
     except G2Exception.G2ModuleException as err:
         exit_error(897, g2_configuration_json, err)
+
+    g2_config_singleton = result
     return result
 
 
 def get_g2_configuration_manager(config, g2_configuration_manager_name="loader-G2-configuration-manager"):
     '''Get the G2Config resource.'''
+    global g2_configuration_manager_singleton
+
+    if g2_configuration_manager_singleton:
+        return g2_configuration_manager_singleton
+
     try:
         g2_configuration_json = get_g2_configuration_json(config)
         result = G2ConfigMgr()
         result.initV2(g2_configuration_manager_name, g2_configuration_json, config.get('debug', False))
     except G2Exception.G2ModuleException as err:
         exit_error(896, g2_configuration_json, err)
+
+    g2_configuration_manager_singleton = result
     return result
 
 
 def get_g2_diagnostic(config, g2_diagnostic_name="loader-G2-diagnostic"):
     '''Get the G2Diagnostic resource.'''
+    global g2_diagnostic_singleton
+
+    if g2_diagnostic_singleton:
+        return g2_diagnostic_singleton
+
     try:
         g2_configuration_json = get_g2_configuration_json(config)
         result = G2Diagnostic()
         result.initV2(g2_diagnostic_name, g2_configuration_json, config.get('debug', False))
     except G2Exception.G2ModuleException as err:
         exit_error(894, g2_configuration_json, err)
+
+    g2_diagnostic_singleton = result
     return result
 
 
 def get_g2_engine(config, g2_engine_name="loader-G2-engine"):
     '''Get the G2Engine resource.'''
+    global g2_engine_singleton
+
+    if g2_engine_singleton:
+        return g2_engine_singleton
+
     try:
         g2_configuration_json = get_g2_configuration_json(config)
         result = G2Engine()
@@ -687,17 +655,26 @@ def get_g2_engine(config, g2_engine_name="loader-G2-engine"):
         config['last_configuration_check'] = time.time()
     except G2Exception.G2ModuleException as err:
         exit_error(898, g2_configuration_json, err)
+
+    g2_engine_singleton = result
     return result
 
 
 def get_g2_product(config, g2_product_name="loader-G2-product"):
     '''Get the G2Product resource.'''
+    global g2_product_singleton
+
+    if g2_product_singleton:
+        return g2_product_singleton
+
     try:
         g2_configuration_json = get_g2_configuration_json(config)
         result = G2Product()
         result.initV2(g2_product_name, g2_configuration_json, config.get('debug'))
     except G2Exception.G2ModuleException as err:
         exit_error(892, config.get('g2project_ini'), err)
+
+    g2_product_singleton = result
     return result
 
 # -----------------------------------------------------------------------------
@@ -923,7 +900,7 @@ def database_update_by_id(config, table_metadata):
 
 
 def missing_key(key, request):
-    message_number = 403
+    message_number = 303
     result = {
         'returnCode': message_number,
         'messageId': message(MESSAGE_WARN, message_number),
@@ -934,7 +911,7 @@ def missing_key(key, request):
 
 
 def bad_method(request, method, methods):
-    message_number = 402
+    message_number = 302
     methods_string = ', '.join(methods)
     result = {
         'returnCode': message_number,
@@ -946,7 +923,7 @@ def bad_method(request, method, methods):
 
 
 def bad_function(request, function):
-    message_number = 401
+    message_number = 301
     result = {
         'returnCode': message_number,
         'messageId': message(MESSAGE_WARN, message_number),
@@ -1033,84 +1010,108 @@ def get_routes():
 # Input parameters:
 #   - config is the dictionary with the configuration.
 #   - message is a dictionary.
-# Output: a dictionary.
+# Output: a dictionary, Http status code.
 # -----------------------------------------------------------------------------
 
 
 def handle_post(config, request, table_metadata):
     table_metadata['request'] = request
-    return database_insert(config, table_metadata)
+    return database_insert(config, table_metadata), status.HTTP_200_OK
 
 
 def handle_put(config, request, table_metadata):
     table_metadata['id_value'] = request.get(table_metadata.get('id'))
     table_metadata['request'] = request
-    return database_update_by_id(config, table_metadata)
+    return database_update_by_id(config, table_metadata), status.HTTP_200_OK
 
 
 def handle_get(config, request, table_metadata):
-    return database_select_all(config, table_metadata)
+    return database_select_all(config, table_metadata), status.HTTP_200_OK
 
 
 def handle_get_single(config, request, table_metadata):
     table_metadata['id_value'] = request.get(table_metadata.get('id'))
-    return database_select_by_id(config, table_metadata)
+    return database_select_by_id(config, table_metadata), status.HTTP_200_OK
 
 
 def handle_delete(config, request, table_metadata):
     table_metadata['id_value'] = request.get(table_metadata.get('id'))
-    return database_delete_by_id(config, table_metadata)
+    return database_delete_by_id(config, table_metadata), status.HTTP_200_OK
 
 # ----- root ------------------------------------------------------------------
 
 
 def handle_get_root(config, request):
-    return get_routes()
+    return get_routes(), status.HTTP_200_OK
 
 # ----- data-source -----------------------------------------------------------
 
 
 def handle_post_data_sources(config, request):
+    response = {}
 
-    # Get Senzing G2 resources
+    # Pull values out of HTTP request.
+
+    dsrc_code = request.get("DSRC_CODE")
+    if not dsrc_code:
+        return missing_key("DSRC_CODE", request), status.HTTP_400_BAD_REQUEST
+
+    # Get Senzing G2 resources.
 
     g2_engine = get_g2_engine(config)
     g2_config = get_g2_config(config)
     g2_configuration_manager = get_g2_configuration_manager(config)
 
+    # Get active configuration identifier.
+
     config_handle = g2_config.create()
+    active_config_id_bytearray = bytearray()
+    g2_engine.getActiveConfigID(active_config_id_bytearray)
+    active_config_id_int = int(active_config_id_bytearray)  # FIXME:  Hack to work around insistent Python API.
 
-    active_config_id = bytearray()
-    g2_engine.getActiveConfigID(active_config_id)
+    # Get active configuration JSON string.
 
-    active_config_json = bytearray()
+    active_config_bytearray = bytearray()
+    g2_configuration_manager.getConfig(active_config_id_int, active_config_bytearray)
+    active_config_json = active_config_bytearray.decode()
 
-    # FIXME:  Hack to work around Python API inconsistency.
+    # Load the JSON string into a G2Config object.
 
-    active_config_id_int = int(active_config_id)
+    active_config_handle = g2_config.load(active_config_json)
 
-    g2_configuration_manager.getConfig(active_config_id_int, active_config_json)
+    # Add datasource to G2Config object.
 
-    print("MJD: {0}".format(type(active_config_json)))
+    g2_config.addDataSource(config_handle, dsrc_code)
 
-    active_config_handle = g2_config.load(active_config_json.decode())
-    g2_config.addDataSource(config_handle, "BOB")
+    # Get JSON string with new datasource added.
 
-    new_config_json = bytearray()
-    return_code = g2_config.save(config_handle, new_config_json)
+    new_config_bytearray = bytearray()
+    return_code = g2_config.save(config_handle, new_config_bytearray)
+    new_config_json = new_config_bytearray.decode()
 
-    new_configuration_comments = "Add Bob"
-    new_config_id  = bytearray()
+    new_configuration_comments = "Add Datasource '{0}' to CONFIG_DATA_ID: {1}".format(dsrc_code, active_config_id_int)
+    new_config_id_bytearray = bytearray()
 
-    g2_configuration_manager.addConfig(new_config_json.decode(), new_configuration_comments, new_config_id)
+    # Add configuration to G2 database SYS_CFG table.
 
+    g2_configuration_manager.addConfig(new_config_json, new_configuration_comments, new_config_id_bytearray)
 
-#     return handle_post(config, request, table_metadata)
-    return {}
+    # Update current configuration in existing engine.
+
+    g2_engine.reinitV2(new_config_id_bytearray)
+
+    # Set Default
+
+    g2_configuration_manager.setDefaultConfigID(new_config_id_bytearray)
+
+    # Create response.
+
+    response["message"] = new_configuration_comments
+    return response, status.HTTP_201_CREATED
 
 
 def handle_put_data_sources(config, request):
-    return handle_put(config, request, get_table_metadata_cfg_dsrc())
+    return handle_put(config, request, get_table_metadata_cfg_dsrc()), status.HTTP_200_OK
 
 
 def handle_get_data_sources(config, request):
@@ -1133,15 +1134,15 @@ def handle_get_data_sources(config, request):
         exit_error(754, return_code, method, parameters)
 
     result = json.loads(datasources_bytearray.decode())
-    return result
+    return result, status.HTTP_200_OK
 
 
 def handle_get_data_source(config, request):
-    return handle_get_single(config, request, get_table_metadata_cfg_dsrc())
+    return handle_get_single(config, request, get_table_metadata_cfg_dsrc()), status.HTTP_200_OK
 
 
 def handle_delete_data_sources(config, request):
-    return handle_delete(config, request, get_table_metadata_cfg_dsrc())
+    return handle_delete(config, request, get_table_metadata_cfg_dsrc()), status.HTTP_200_OK
 
 # ----- entity_type -----------------------------------------------------------
 
@@ -1149,30 +1150,30 @@ def handle_delete_data_sources(config, request):
 def handle_post_entity_types(config, request):
     table_metadata = get_table_metadata_cfg_etype()
     table_metadata['defaults']['ETYPE_DESC'] = request.get('ETYPE_CODE', "")
-    return handle_post(config, request, table_metadata)
+    return handle_post(config, request, table_metadata), status.HTTP_200_OK
 
 
 def handle_put_entity_types(config, request):
-    return handle_put(config, request, get_table_metadata_cfg_etype())
+    return handle_put(config, request, get_table_metadata_cfg_etype()), status.HTTP_200_OK
 
 
 def handle_get_entity_types(config, request):
-    return handle_get(config, request, get_table_metadata_cfg_etype())
+    return handle_get(config, request, get_table_metadata_cfg_etype()), status.HTTP_200_OK
 
 
 def handle_get_entity_type(config, request):
-    return handle_get_single(config, request, get_table_metadata_cfg_etype())
+    return handle_get_single(config, request, get_table_metadata_cfg_etype()), status.HTTP_200_OK
 
 
 def handle_delete_entity_types(config, request):
-    return handle_delete(config, request, get_table_metadata_cfg_etype())
+    return handle_delete(config, request, get_table_metadata_cfg_etype()), status.HTTP_200_OK
 
 # -----------------------------------------------------------------------------
 # message router
 # -----------------------------------------------------------------------------
 
 
-def route(config, message_dictionary):
+def route_http_request(config, message_dictionary):
 
     methods = ["post", "put", "get", "delete"]
 
@@ -1198,8 +1199,15 @@ def route(config, message_dictionary):
 
     # Tricky code for calling function based on string.
 
-    result = globals()[route_function_name](config, request)
-    return json.dumps(result, sort_keys=True)
+    result, status = globals()[route_function_name](config, request)
+
+    # Construct Flask response.
+
+    print(result)
+
+    response = json.dumps(result, sort_keys=True)
+    mimetype = 'application/json'
+    return Response(response=response, status=status, mimetype=mimetype)
 
 # -----------------------------------------------------------------------------
 # Flask @app.routes
@@ -1209,7 +1217,7 @@ def route(config, message_dictionary):
 @app.route("/generic", methods=['POST'])
 def http_post_generic():
     config = get_config()
-    return route(config, flask_request.json)
+    return route_http_request(config, flask_request.json)
 
 # ----- entity-type -----------------------------------------------------------
 
@@ -1222,7 +1230,7 @@ def http_post_entity_type():
         "object": "entity_types",
         "request": flask_request.json
     }
-    return route(config, request)
+    return route_http_request(config, request)
 
 
 @app.route("/entity-types/<id>", methods=['PUT'])
@@ -1237,7 +1245,7 @@ def http_put_entity_type(id):
         "object": "entity_types",
         "request": request
     }
-    return route(config, request)
+    return route_http_request(config, request)
 
 
 @app.route("/entity-types", methods=['GET'])
@@ -1247,7 +1255,7 @@ def http_get_entity_types():
         "method": "get",
         "object": "entity_types"
     }
-    return route(config, request)
+    return route_http_request(config, request)
 
 
 @app.route("/entity-types/<id>", methods=['GET'])
@@ -1260,7 +1268,7 @@ def http_get_entity_type(id):
             "ETYPE_ID": id,
         }
     }
-    return route(config, request)
+    return route_http_request(config, request)
 
 
 @app.route("/entity-types/<id>", methods=['DELETE'])
@@ -1273,7 +1281,7 @@ def http_delete_entity_types(id):
             "ETYPE_ID": id,
         }
     }
-    return route(config, request)
+    return route_http_request(config, request)
 
 # ----- data-source -----------------------------------------------------------
 
@@ -1286,7 +1294,7 @@ def http_post_data_source():
         "object": "data_sources",
         "request": flask_request.json
     }
-    return route(config, request)
+    return route_http_request(config, request)
 
 
 @app.route("/data-sources/<id>", methods=['PUT'])
@@ -1301,7 +1309,7 @@ def http_put_data_source(id):
         "object": "data_sources",
         "request": request
     }
-    return route(config, request)
+    return route_http_request(config, request)
 
 
 @app.route("/data-sources", methods=['GET'])
@@ -1311,7 +1319,7 @@ def http_get_data_sources():
         "method": "get",
         "object": "data_sources"
     }
-    return route(config, request)
+    return route_http_request(config, request)
 
 
 @app.route("/data-sources/<id>", methods=['GET'])
@@ -1324,7 +1332,7 @@ def http_get_data_source(id):
             "DSRC_ID": id,
         }
     }
-    return route(config, request)
+    return route_http_request(config, request)
 
 
 @app.route("/data-sources/<id>", methods=['DELETE'])
@@ -1337,7 +1345,7 @@ def http_delete_data_sources(id):
             "DSRC_ID": id,
         }
     }
-    return route(config, request)
+    return route_http_request(config, request)
 
 
 @app.route("/", methods=['GET'])
@@ -1349,7 +1357,7 @@ def http_get_root():
         "request": {
         }
     }
-    return route(config, request)
+    return route_http_request(config, request)
 
 # -----------------------------------------------------------------------------
 # RabbitMQ helpers
@@ -1361,7 +1369,7 @@ def create_on_callback_function(config):
 
     def on_callback(channel, method, header, body):
         message = json.loads(body)
-        route(config, message)
+        route_http_request(config, message)
 
     return on_callback
 
@@ -1385,7 +1393,6 @@ def do_docker_acceptance_test(args):
     # Epilog.
 
     logging.info(exit_template(config))
-
 
 
 def do_service(args):
