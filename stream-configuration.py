@@ -41,7 +41,7 @@ app = Flask(__name__)
 __all__ = []
 __version__ = "1.0.0"  # See https://www.python.org/dev/peps/pep-0396/
 __date__ = '2019-05-23'
-__updated__ = '2019-07-21'
+__updated__ = '2019-07-22'
 
 SENZING_PRODUCT_ID = "5004"  # See https://github.com/Senzing/knowledge-base/blob/master/lists/senzing-product-ids.md
 log_format = '%(asctime)s %(message)s'
@@ -190,6 +190,7 @@ message_dictionary = {
     "301": "Cannot process request. No function for '{0}'.",
     "302": "Cannot process request. Method '{0}' not in {1}",
     "303": "Cannot process request. Key '{0}' not in request.",
+    "304": "No default configuration in SYS_CFG table.",
     "499": "{0}",
     "500": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}E",
     "501": "Error: {0} for {1}",
@@ -592,8 +593,6 @@ def get_g2_config(config, g2_config_name="loader-G2-config"):
     if g2_config_singleton:
         return g2_config_singleton
 
-    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-
     try:
         g2_configuration_json = get_g2_configuration_json(config)
         result = G2Config()
@@ -863,7 +862,7 @@ def database_update_by_id(config, table_metadata):
     # Verify input request.
 
     if id not in request:
-        return missing_key(id, request)
+        return response_missing_key(request, id)
 
     # Remove ID from request.
 
@@ -899,7 +898,7 @@ def database_update_by_id(config, table_metadata):
 # -----------------------------------------------------------------------------
 
 
-def missing_key(key, request):
+def response_missing_key(request, key):
     message_number = 303
     result = {
         'returnCode': message_number,
@@ -910,7 +909,7 @@ def missing_key(key, request):
     return result
 
 
-def bad_method(request, method, methods):
+def response_bad_method(request, method, methods):
     message_number = 302
     methods_string = ', '.join(methods)
     result = {
@@ -922,12 +921,23 @@ def bad_method(request, method, methods):
     return result
 
 
-def bad_function(request, function):
+def response_bad_function(request, function):
     message_number = 301
     result = {
         'returnCode': message_number,
         'messageId': message(MESSAGE_WARN, message_number),
         'message': message(message_number, function),
+        'request': request,
+    }
+    return result
+
+
+def response_no_default_configuration(request):
+    message_number = 304
+    result = {
+        'returnCode': message_number,
+        'messageId': message(MESSAGE_WARN, message_number),
+        'message': message(message_number),
         'request': request,
     }
     return result
@@ -1054,59 +1064,56 @@ def handle_post_data_sources(config, request):
 
     dsrc_code = request.get("DSRC_CODE")
     if not dsrc_code:
-        return missing_key("DSRC_CODE", request), status.HTTP_400_BAD_REQUEST
+        return response_missing_key(request, "DSRC_CODE"), status.HTTP_400_BAD_REQUEST
 
     # Get Senzing G2 resources.
 
-    g2_engine = get_g2_engine(config)
     g2_config = get_g2_config(config)
     g2_configuration_manager = get_g2_configuration_manager(config)
 
-    # Get active configuration identifier.
+    # Get default configuration identifier.
 
-    config_handle = g2_config.create()
-    active_config_id_bytearray = bytearray()
-    g2_engine.getActiveConfigID(active_config_id_bytearray)
-    active_config_id_int = int(active_config_id_bytearray)  # FIXME:  Hack to work around insistent Python API.
+    default_configuration_id_bytearray = bytearray()
+    g2_configuration_manager.getDefaultConfigID(default_configuration_id_bytearray)
 
-    # Get active configuration JSON string.
+    # Get default configuration as JSON string.
 
-    active_config_bytearray = bytearray()
-    g2_configuration_manager.getConfig(active_config_id_int, active_config_bytearray)
-    active_config_json = active_config_bytearray.decode()
+    if not default_configuration_id_bytearray:
+        return response_no_default_configuration(request), status.HTTP_400_BAD_REQUEST
 
-    # Load the JSON string into a G2Config object.
+    default_configuration_id_int = int(default_configuration_id_bytearray)
+    default_configuration_bytearray = bytearray()
+    g2_configuration_manager.getConfig(default_configuration_id_int, default_configuration_bytearray)
+    default_configuration_json = default_configuration_bytearray.decode()
 
-    active_config_handle = g2_config.load(active_config_json)
+    # Create a G2Config object with the default configuration.
+
+    default_configuration_handle = g2_config.load(default_configuration_json)
 
     # Add datasource to G2Config object.
 
-    g2_config.addDataSource(config_handle, dsrc_code)
+    g2_config.addDataSource(default_configuration_handle, dsrc_code)
 
     # Get JSON string with new datasource added.
 
-    new_config_bytearray = bytearray()
-    return_code = g2_config.save(config_handle, new_config_bytearray)
-    new_config_json = new_config_bytearray.decode()
-
-    new_configuration_comments = "Add Datasource '{0}' to CONFIG_DATA_ID: {1}".format(dsrc_code, active_config_id_int)
-    new_config_id_bytearray = bytearray()
+    new_configration_bytearray = bytearray()
+    return_code = g2_config.save(default_configuration_handle, new_configration_bytearray)
+    new_configuration_json = new_configration_bytearray.decode()
 
     # Add configuration to G2 database SYS_CFG table.
 
-    g2_configuration_manager.addConfig(new_config_json, new_configuration_comments, new_config_id_bytearray)
+    new_configuration_comments = "Add '{0}' datasource to CONFIG_DATA_ID: {1}".format(dsrc_code, default_configuration_id_int)
+    new_configuration_id_bytearray = bytearray()
+    g2_configuration_manager.addConfig(new_configuration_json, new_configuration_comments, new_configuration_id_bytearray)
+    new_configuration_id_int = int(new_configuration_id_bytearray)
 
-    # Update current configuration in existing engine.
+    # Set Default.
 
-    g2_engine.reinitV2(new_config_id_bytearray)
+    g2_configuration_manager.setDefaultConfigID(new_configuration_id_bytearray)
 
-    # Set Default
+    # Create HTTP response.
 
-    g2_configuration_manager.setDefaultConfigID(new_config_id_bytearray)
-
-    # Create response.
-
-    response["message"] = new_configuration_comments
+    response["message"] = "New configuration id is {0} after adding '{1}' datasource to CONFIG_DATA_ID: {2}".format(new_configuration_id_int, dsrc_code, default_configuration_id_int)
     return response, status.HTTP_201_CREATED
 
 
@@ -1186,7 +1193,7 @@ def route_http_request(config, message_dictionary):
     # Verify method.
 
     if method not in methods:
-        return json.dumps(bad_method(message_dictionary, method, methods), sort_keys=True)
+        return json.dumps(response_bad_method(message_dictionary, method, methods), sort_keys=True)
 
     # Create a function name.
 
@@ -1195,15 +1202,13 @@ def route_http_request(config, message_dictionary):
     # Test to see if function exists in the code.
 
     if route_function_name not in globals():
-        return json.dumps(bad_function(message_dictionary, object), sort_keys=True)
+        return json.dumps(response_bad_function(message_dictionary, object), sort_keys=True)
 
     # Tricky code for calling function based on string.
 
     result, status = globals()[route_function_name](config, request)
 
     # Construct Flask response.
-
-    print(result)
 
     response = json.dumps(result, sort_keys=True)
     mimetype = 'application/json'
