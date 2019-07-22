@@ -592,8 +592,6 @@ def get_g2_config(config, g2_config_name="loader-G2-config"):
     if g2_config_singleton:
         return g2_config_singleton
 
-    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-
     try:
         g2_configuration_json = get_g2_configuration_json(config)
         result = G2Config()
@@ -1202,8 +1200,6 @@ def route_http_request(config, message_dictionary):
     result, status = globals()[route_function_name](config, request)
 
     # Construct Flask response.
-
-    print(result)
 
     response = json.dumps(result, sort_keys=True)
     mimetype = 'application/json'
