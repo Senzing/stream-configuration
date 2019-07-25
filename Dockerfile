@@ -9,7 +9,6 @@ LABEL Name="senzing/stream-configuration" \
 
 HEALTHCHECK CMD ["/app/healthcheck.sh"]
 
-
 # Run as "root" for system installation.
 
 USER root

@@ -57,6 +57,9 @@ To see the options for a subcommand, run commands like:
 
 ### Configuration
 
+* **SENZING_CONFIG_PATH** -
+  Location of Senzing configuration.
+  Default: /opt/senzing/g2/data
 * **SENZING_DATABASE_URL** -
   Database URI in the form: `${DATABASE_PROTOCOL}://${DATABASE_USERNAME}:${DATABASE_PASSWORD}@${DATABASE_HOST}:${DATABASE_PORT}/${DATABASE_DATABASE}`
   Default:  [internal SQLite database]
@@ -70,13 +73,6 @@ To see the options for a subcommand, run commands like:
   See [Create SENZING_DIR](#create-senzing_dir).
   No default.
   Usually set to "/opt/senzing".
-* **SENZING_ENTRYPOINT_SLEEP** -
-  Sleep, in seconds, before executing.
-  0 for sleeping infinitely.
-  [not-set] if no sleep.
-  Useful for debugging docker containers.
-  To stop sleeping, run "`unset SENZING_ENTRYPOINT_SLEEP`".
-  Default: [not-set].
 * **SENZING_HOST** -
   IP address for web micro-service.
   Default: 0.0.0.0
@@ -89,11 +85,15 @@ To see the options for a subcommand, run commands like:
 * **SENZING_PORT** -
   IP address for web micro-service.
   Default: 5000
-* **SENZING_SLEEP_TIME** -
-  Amount of time to sleep, in seconds for `stream-loader.py sleep` subcommand.
+* **SENZING_SLEEP_TIME_IN_SECONDS** -
+  Amount of time to sleep, in seconds for `stream-configuration.py sleep` subcommand.
   Default: 600.
 * **SENZING_SUBCOMMAND** -
-  Identify the subcommand to be run. See `stream-loader.py --help` for complete list.
+  Identify the subcommand to be run. See `stream-configuration.py --help` for complete list.
+* **SENZING_SUPPORT_PATH** -
+  Location of Senzing support.
+  Default: /opt/senzing/g2/data
+
 
 1. To determine which configuration parameters are use for each `<subcommand>`, run:
 
