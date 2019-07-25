@@ -1,13 +1,18 @@
-ARG BASE_IMAGE=senzing/senzing-base:1.0.3
+ARG BASE_IMAGE=senzing/senzing-base:1.1.0
 FROM ${BASE_IMAGE}
 
-ENV REFRESHED_AT=2019-05-01
+ENV REFRESHED_AT=2019-07-23
 
 LABEL Name="senzing/stream-configuration" \
       Maintainer="support@senzing.com" \
-      Version="1.0.0"
+      Version="1.1.0"
 
 HEALTHCHECK CMD ["/app/healthcheck.sh"]
+
+
+# Run as "root" for system installation.
+
+USER root
 
 # Install packages via apt.
 
@@ -32,10 +37,13 @@ RUN pip3 install \
 COPY ./rootfs /
 COPY ./stream-configuration.py /app/
 
+# Make non-root container.
+
+USER 1001
+
 # Runtime execution.
 
 ENV SENZING_DOCKER_LAUNCHED=true
 
 WORKDIR /app
-ENTRYPOINT ["/app/docker-entrypoint.sh", "/app/stream-configuration.py" ]
-CMD [""]
+ENTRYPOINT ["/app/stream-configuration.py" ]
