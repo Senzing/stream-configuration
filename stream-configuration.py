@@ -41,7 +41,7 @@ app = Flask(__name__)
 __all__ = []
 __version__ = "1.0.0"  # See https://www.python.org/dev/peps/pep-0396/
 __date__ = '2019-05-23'
-__updated__ = '2019-07-22'
+__updated__ = '2019-09-23'
 
 SENZING_PRODUCT_ID = "5004"  # See https://github.com/Senzing/knowledge-base/blob/master/lists/senzing-product-ids.md
 log_format = '%(asctime)s %(message)s'
@@ -202,7 +202,6 @@ message_dictionary = {
     "699": "{0}",
     "700": "senzing-" + SENZING_PRODUCT_ID + "{0:04d}E",
     "886": "G2Engine.addRecord() bad return code: {0}; JSON: {1}",
-    "887": "G2Engine.addRecord() TranslateG2ModuleException: {0}; JSON: {1}",
     "888": "G2Engine.addRecord() G2ModuleNotInitialized: {0}; JSON: {1}",
     "889": "G2Engine.addRecord() G2ModuleGenericException: {0}; JSON: {1}",
     "890": "G2Engine.addRecord() Exception: {0}; JSON: {1}",
@@ -1129,8 +1128,6 @@ def handle_get_data_sources(config, request):
     parameters = "{0}, {1}".format(config_handle, datasources_bytearray.decode())
     try:
         return_code = g2_config.listDataSources(config_handle, datasources_bytearray)
-    except G2Exception.TranslateG2ModuleException as err:
-        logging.error(message_error(750, err, method, parameters))
     except G2Exception.G2ModuleNotInitialized as err:
         logging.error(message_error(751, err, method, parameters))
     except Exception as err:
