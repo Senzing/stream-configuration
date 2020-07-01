@@ -268,6 +268,7 @@ For other databases, these steps may be skipped.
     sudo docker run \
       --env SENZING_SUBCOMMAND=service \
       --interactive \
+      --publish 5000:5000 \
       --rm \
       --tty \
       --volume ${SENZING_DATA_VERSION_DIR}:/opt/senzing/data \
