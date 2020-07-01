@@ -266,6 +266,7 @@ For other databases, these steps may be skipped.
 
     ```console
     sudo docker run \
+      -- env SENZING_SUBCOMMAND=service \
       --interactive \
       --rm \
       --tty \
