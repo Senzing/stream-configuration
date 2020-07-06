@@ -9,7 +9,7 @@ This docker formation brings up the following docker containers:
 
 1. *[bitnami/rabbitmq](https://github.com/bitnami/bitnami-docker-rabbitmq)*
 1. *[coleifer/sqlite-web](https://github.com/coleifer/sqlite-web)*
-1. *[senzing/mock-data-generator](https://github.com/Senzing/mock-data-generator)*
+1. *[senzing/stream-producer](https://github.com/Senzing/stream-producer)*
 1. *[senzing/stream-configuration](https://github.com/Senzing/stream-configuration)*
 
 ### Contents

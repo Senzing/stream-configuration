@@ -29,17 +29,17 @@ services:
       - '9092:9092'
     restart: always
 
-  mockdata:
-    image: senzing/mock-data-generator
-    container_name: senzing-mock-data-generator
+  producer:
+    image: senzing/stream-producer
+    container_name: senzing-stream-producer
     depends_on:
       - kafka
     environment:
-#     See https://github.com/Senzing/docker-mock-data-generator#configuration
+#     See https://github.com/Senzing/docker-stream-producer#configuration
       SENZING_KAFKA_BOOTSTRAP_SERVER: senzing-kafka:9092
       SENZING_KAFKA_TOPIC: "senzing-config-kafka-topic"
       SENZING_INPUT_URL: "https://raw.githubusercontent.com/Senzing/stream-configuration/master/tests/datasource/scenario.jsonlines"
-      SENZING_SUBCOMMAND: url-to-kafka
+      SENZING_SUBCOMMAND: json-to-kafka
     networks:
       - backend
     restart: on-failure

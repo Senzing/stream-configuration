@@ -14,19 +14,19 @@ services:
       - 5672:5672
     restart: always
 
-  mockdata:
-    image: senzing/mock-data-generator
-    container_name: senzing-mock-data-generator
+  producer:
+    image: senzing/stream-producer
+    container_name: senzing-stream-producer
     depends_on:
       - rabbitmq
     environment:
-#     See https://github.com/Senzing/docker-mock-data-generator#configuration
+#     See https://github.com/Senzing/docker-stream-producer#configuration
       SENZING_INPUT_URL: "https://raw.githubusercontent.com/Senzing/stream-configuration/master/tests/datasource/scenario.jsonlines"
       SENZING_RABBITMQ_HOST: senzing-rabbitmq
       SENZING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-bitnami}
       SENZING_RABBITMQ_QUEUE: senzing-rabbitmq-queue
       SENZING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-user}
-      SENZING_SUBCOMMAND: url-to-rabbitmq
+      SENZING_SUBCOMMAND: json-to-rabbitmq
     networks:
       - backend
     restart: on-failure
